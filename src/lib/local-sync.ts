@@ -10,7 +10,7 @@ function sqlite(): typeof DatabaseType {
   return require("better-sqlite3");
 }
 
-export const KEEPSAKE_DIR = path.join(os.homedir(), ".keepsake");
+export const KEEPSAKE_DIR = path.join(os.homedir(), ".sidenote");
 const RAW_DIR = path.join(KEEPSAKE_DIR, "raw");
 export const INDEX_DB = path.join(KEEPSAKE_DIR, "index.db");
 
@@ -79,7 +79,7 @@ export function formatIdentifier(id: string): string {
 export class PermissionError extends Error {
   constructor() {
     super(
-      "Keepsake can't read your Messages database. Grant Full Disk Access to your terminal (System Settings → Privacy & Security → Full Disk Access), then restart Keepsake — re-run the install command, or restart `npm run dev` — and sync again."
+      "Sidenote can't read your Messages database. Grant Full Disk Access to your terminal (System Settings → Privacy & Security → Full Disk Access), then restart Sidenote — re-run the install command, or restart `npm run dev` — and sync again."
     );
     this.name = "PermissionError";
   }

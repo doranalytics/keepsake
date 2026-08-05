@@ -476,7 +476,7 @@ function ExportDialog({
       const blob = new Blob([text], { type: "text/plain" });
       const a = document.createElement("a");
       a.href = URL.createObjectURL(blob);
-      a.download = `${threadName.replace(/[^\w -]/g, "")} - Keepsake export.txt`;
+      a.download = `${threadName.replace(/[^\w -]/g, "")} - Sidenote export.txt`;
       a.click();
       URL.revokeObjectURL(a.href);
       onOpenChange(false);

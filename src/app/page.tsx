@@ -1,5 +1,5 @@
-import { KeepsakeApp } from "@/components/keepsake-app";
+import { SidenoteApp } from "@/components/sidenote-app";
 
 export default function Home() {
-  return <KeepsakeApp />;
+  return <SidenoteApp />;
 }

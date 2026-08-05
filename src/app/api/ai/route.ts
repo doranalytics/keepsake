@@ -10,7 +10,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(
       {
         error:
-          "AI runs on-device via Ollama and is available when Keepsake runs on your Mac.",
+          "AI runs on-device via Ollama and is available when Sidenote runs on your Mac.",
       },
       { status: 400 }
     );
@@ -35,7 +35,7 @@ export async function POST(req: NextRequest) {
   }
 
   const context = getRecentText(body.threadId);
-  const system = `You are Keepsake, a private on-device assistant that helps the user remember and understand their iMessage conversations. The conversation below is between the user ("Me") and ${thread.name}. Be concise, warm, and concrete. Never invent details that aren't in the messages.`;
+  const system = `You are Sidenote, a private on-device assistant that helps the user remember and understand their iMessage conversations. The conversation below is between the user ("Me") and ${thread.name}. Be concise, warm, and concrete. Never invent details that aren't in the messages.`;
   const user =
     body.mode === "summarize"
       ? `Here are the recent messages:\n\n${context}\n\nSummarize this conversation: the key facts, plans, and anything worth remembering about ${thread.name}. Use short bullet points.`

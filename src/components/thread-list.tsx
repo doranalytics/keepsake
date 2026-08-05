@@ -87,7 +87,7 @@ export function ThreadList({
     <div className="flex h-full flex-col">
       <div className="shrink-0 space-y-3 px-4 pt-4 pb-3">
         <div className="flex items-center justify-between">
-          <h1 className="text-xl font-bold tracking-tight">Keepsake</h1>
+          <h1 className="text-xl font-bold tracking-tight">Sidenote</h1>
           <div className="flex items-center gap-2">
             {status?.mode === "demo" && (
               <Badge variant="secondary" className="text-[11px]">

@@ -2,7 +2,7 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Keepsake — remember your conversations",
+  title: "Sidenote — remember your conversations",
   description:
     "An iMessage companion. Search everything you've ever texted, keep notes on the people you care about, and ask on-device AI about any thread.",
   manifest: "/manifest.webmanifest",
@@ -12,7 +12,7 @@ export const metadata: Metadata = {
   },
   appleWebApp: {
     capable: true,
-    title: "Keepsake",
+    title: "Sidenote",
     statusBarStyle: "default",
   },
 };

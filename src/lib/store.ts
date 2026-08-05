@@ -265,7 +265,7 @@ export function exportThread(
   });
   const header = `Conversation with ${thread.name}${
     thread.isGroup ? ` (${thread.participants.join(", ")})` : ""
-  }\n${msgs.length} messages · exported from Keepsake on ${new Date().toLocaleDateString()}\n\n`;
+  }\n${msgs.length} messages · exported from Sidenote on ${new Date().toLocaleDateString()}\n\n`;
   return { name: thread.name, text: header + lines.join("\n"), count: msgs.length };
 }
 

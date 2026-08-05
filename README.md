@@ -1,53 +1,54 @@
-# Keepsake
+# Sidenote
 
-An iMessage companion for your Mac. Search everything you've ever texted, keep
-notes on the people you care about, and ask on-device AI about any thread.
+The iMessage companion for your Mac. Search everything you've ever texted, pin
+the messages worth remembering, keep notes on the people you care about, and
+ask on-device AI about any thread.
 
-**Live demo:** the deployed site runs with realistic sample conversations, since
-a web server can't (and shouldn't) read your Messages database. The real thing
-runs locally on your Mac.
+**Get it:** https://sidenote.lol — the site is a live demo with
+sample conversations plus a one-command installer. Sidenote itself runs 100%
+locally; a web server can't (and shouldn't) read your Messages database.
 
 ## What it does
 
 - **Sync** — copies `~/Library/Messages/chat.db` into a private index at
-  `~/.keepsake/` (SQLite + FTS5 full-text search). Your Contacts database is
-  used to resolve phone numbers and emails into names. Nothing leaves your Mac.
-- **Search** — instant full-text search across every conversation, or scoped to
-  a single thread. Click a result to jump to that exact moment in the chat.
-- **Notes** — a private notepad pinned to each person or group, saved in your
-  browser.
-- **On-device AI** — summarize a thread or ask questions about it ("what plans
-  did we make?") through [Ollama](https://ollama.com). Uses whatever model you
-  have pulled (Qwen models are preferred if present). No API keys, no cloud.
+  `~/.sidenote/` (SQLite + FTS5 full-text search). Your Contacts database
+  resolves phone numbers and emails into names. Nothing leaves your Mac.
+- **Search** — instant full-text search across every conversation, or scoped
+  to one thread. Click a result to jump to that exact moment in the chat.
+- **Remember** — right-click any message → "Remember this." It's pinned beside
+  your notes on that person; clicking it jumps back to its place in the thread.
+- **Export** — copy or download a plain-text transcript of any conversation
+  (pick a time range), ready to paste into any AI.
+- **On-device AI** — summarize a thread or ask questions about it through
+  [Ollama](https://ollama.com), running a local model on your Mac. Sidenote
+  walks you through the setup in-app. No API keys, no cloud.
 
-## Run it on your Mac
+## Install
+
+Paste this into Terminal:
 
 ```bash
-git clone https://github.com/doranalytics/keepsake && cd keepsake
-npm install
-npm run dev
+curl -fsSL https://sidenote.lol/install.sh | bash
 ```
 
-Open http://localhost:3000 and click **Sync your Messages**.
+It installs to `~/Sidenote`, starts the app at http://localhost:4747, and opens
+it in your browser. Then click **Sync your Messages**.
 
 Two permissions matter:
 
-1. **Full Disk Access** for your terminal app (System Settings → Privacy &
-   Security → Full Disk Access) so Keepsake can read the Messages database.
-   The setup screen has an "Open Full Disk Access settings" button that jumps
-   straight to the right pane — macOS doesn't allow apps to grant this
-   themselves, so you flip the toggle for the terminal app you launch Keepsake
-   from, then restart that terminal. The grant goes to your terminal app on
-   your Mac, not to any cloud or AI service.
-2. **Ollama running** (`ollama serve`, plus e.g. `ollama pull qwen3.6`) if you
-   want the AI features. Everything works without it except summarize/ask.
+1. **Full Disk Access** for your terminal app, so Sidenote can read the
+   Messages database. The app's setup screen has a button that opens the exact
+   System Settings pane — macOS requires you to flip the toggle yourself. The
+   grant goes to your terminal app on your Mac, never to any cloud service.
+2. **Ollama** (optional, for AI): the AI panel guides you through installing
+   Ollama and downloading a local model, with progress shown in-app.
 
-Set `OLLAMA_MODEL` to pin a specific model, `OLLAMA_URL` if Ollama isn't on the
-default port.
+Set `OLLAMA_MODEL` to pin a specific model, `OLLAMA_URL` if Ollama isn't on
+the default port.
 
 ## Privacy
 
-Keepsake is read-only over your data and fully local: the message index lives in
-`~/.keepsake/`, notes live in your browser's localStorage, and AI inference runs
-on your machine via Ollama. The deployed demo contains only fictional sample
-data.
+Sidenote is read-only over your data and fully local: the message index lives
+in `~/.sidenote/`, notes and pinned messages live in your browser's
+localStorage, and AI inference runs on your machine via Ollama. The deployed
+demo contains only fictional sample data.

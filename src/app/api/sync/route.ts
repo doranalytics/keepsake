@@ -7,7 +7,7 @@ export const maxDuration = 300;
 export async function POST() {
   if (isDemo) {
     return NextResponse.json(
-      { error: "Demo mode uses sample data. Run Keepsake on your Mac to sync your own messages." },
+      { error: "Demo mode uses sample data. Run Sidenote on your Mac to sync your own messages." },
       { status: 400 }
     );
   }

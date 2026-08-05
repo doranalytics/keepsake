@@ -172,7 +172,7 @@ export function AiPanel({
     return (
       <SetupShell
         title="On-device AI"
-        body="Summaries and thread Q&A run privately through Ollama when Keepsake runs on your Mac. Nothing ever leaves your computer."
+        body="Summaries and thread Q&A run privately through Ollama when Sidenote runs on your Mac. Nothing ever leaves your computer."
       />
     );
   }
@@ -182,7 +182,7 @@ export function AiPanel({
     return (
       <SetupShell
         title="Turn on on-device AI"
-        body="Keepsake uses Ollama — a free app that runs AI models privately on your Mac. Install it, open it once, and come back."
+        body="Sidenote uses Ollama — a free app that runs AI models privately on your Mac. Install it, open it once, and come back."
       >
         <div className="flex flex-col items-center gap-2">
           <Button

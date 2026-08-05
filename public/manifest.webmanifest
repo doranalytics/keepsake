@@ -1,6 +1,6 @@
 {
-  "name": "Keepsake",
-  "short_name": "Keepsake",
+  "name": "Sidenote",
+  "short_name": "Sidenote",
   "description": "An iMessage companion — search your texts, keep notes on people, ask AI about any thread.",
   "start_url": "/",
   "display": "standalone",

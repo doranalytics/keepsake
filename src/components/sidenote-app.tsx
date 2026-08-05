@@ -13,7 +13,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sh
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 
-export function KeepsakeApp() {
+export function SidenoteApp() {
   const [status, setStatus] = useState<AppStatus | null>(null);
   const [threads, setThreads] = useState<Thread[]>([]);
   const [loading, setLoading] = useState(true);
@@ -99,7 +99,7 @@ export function KeepsakeApp() {
               onClick={() => setShowLanding(true)}
               className="shrink-0 bg-[#0a84ff] px-4 py-1.5 text-center text-[12px] font-medium text-white transition-colors hover:bg-[#0974df]"
             >
-              Sample data — get Keepsake for your own messages →
+              Sample data — get Sidenote for your own messages →
             </button>
           )}
           {syncError && (
@@ -200,9 +200,9 @@ function SetupScreen({
         <div className="flex size-14 items-center justify-center rounded-2xl bg-[#0a84ff]">
           <MessageCircleHeart className="size-7 text-white" />
         </div>
-        <h1 className="mt-5 text-2xl font-bold tracking-tight">Welcome to Keepsake</h1>
+        <h1 className="mt-5 text-2xl font-bold tracking-tight">Welcome to Sidenote</h1>
         <p className="mt-2 text-[15px] leading-relaxed text-muted-foreground">
-          Your iMessage companion. Keepsake copies your Messages history into a private local
+          Your iMessage companion. Sidenote copies your Messages history into a private local
           index so you can actually find things — then layers on notes and on-device AI.
         </p>
         <ul className="mt-4 space-y-2 text-[13.5px] text-muted-foreground">
@@ -243,8 +243,8 @@ function SetupScreen({
         <p className="mt-4 text-[12px] leading-relaxed text-muted-foreground">
           First sync needs <span className="font-medium text-foreground">Full Disk Access</span>,
           which macOS only lets you grant by hand: in the settings pane, enable the toggle for the
-          terminal app you launched Keepsake from (e.g. Terminal or iTerm), then relaunch it and
-          sync again. You&apos;re granting access to that app on your Mac — not to Keepsake&apos;s
+          terminal app you launched Sidenote from (e.g. Terminal or iTerm), then relaunch it and
+          sync again. You&apos;re granting access to that app on your Mac — not to Sidenote&apos;s
           code, and not to any AI or cloud service. Your messages never leave this computer.
         </p>
       </div>
