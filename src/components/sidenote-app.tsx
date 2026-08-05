@@ -304,7 +304,7 @@ function SetupScreen({
             First sync needs one macOS permission (
             <span className="font-medium text-foreground">Full Disk Access</span>
             ). If it&apos;s missing, Sidenote will walk you through granting it —
-            three clicks, one time. Your messages never leave this computer.
+            two steps, one time. Your messages never leave this computer.
           </p>
         )}
       </div>

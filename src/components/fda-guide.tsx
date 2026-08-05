@@ -54,26 +54,21 @@ export function FdaGuide({ engine }: { engine?: string | null }) {
           Open Full Disk Access settings
         </Button>
       ),
-      hint: "Opens the exact System Settings pane. Keep it visible for the next step.",
-    },
-    {
-      icon: <FolderSearch className="size-4" />,
-      button: (
-        <Button
-          size="sm"
-          variant="outline"
-          onClick={() => fetch("/api/reveal-engine", { method: "POST" })}
-          className="h-8 rounded-lg text-[12.5px]"
-        >
-          Show Sidenote&apos;s engine in Finder
-        </Button>
-      ),
       hint: (
         <>
-          A Finder window opens with{" "}
-          <span className="font-medium text-foreground">{engineName}</span>{" "}
-          selected. Drag that file into the Full Disk Access list and turn its
-          switch on. macOS may ask for your password.
+          Find <span className="font-medium text-foreground">{engineName}</span>{" "}
+          in the list and turn its switch on — macOS added it there when the
+          sync was blocked. It may ask for your password.
+          <span className="mt-1.5 block">
+            Not in the list?{" "}
+            <button
+              onClick={() => fetch("/api/reveal-engine", { method: "POST" })}
+              className="inline-flex items-center gap-1 font-medium text-[#0a84ff] hover:underline"
+            >
+              <FolderSearch className="size-3.5" /> Reveal the engine in Finder
+            </button>{" "}
+            and drag the file in.
+          </span>
         </>
       ),
     },
@@ -115,8 +110,8 @@ export function FdaGuide({ engine }: { engine?: string | null }) {
         One-time macOS permission needed
       </p>
       <p className="mt-1 text-[13px] leading-relaxed text-muted-foreground">
-        macOS keeps your Messages locked down and only lets you grant access by
-        hand. Three steps, once:
+        macOS keeps your Messages locked down and only lets you flip the switch
+        yourself. Two steps, once:
       </p>
       <ol className="mt-3 space-y-3">
         {steps.map((s, i) => (

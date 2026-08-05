@@ -29,7 +29,7 @@ await page.click("text=Show me how to grant it");
 await page.waitForSelector("text=One-time macOS permission needed", { timeout: 10000 });
 for (const label of [
   "Open Full Disk Access settings",
-  "Show Sidenote's engine in Finder",
+  "Reveal the engine in Finder",
   "Restart Sidenote",
 ]) {
   if (!(await page.locator(`button:has-text("${label}")`).count()))
@@ -37,6 +37,8 @@ for (const label of [
 }
 if (!(await page.locator("text=Sidenote Engine").count()))
   fail("guide does not mention the friendly 'Sidenote Engine' name");
+if (!(await page.locator("text=turn its switch on").count()))
+  fail("guide does not lead with the flip-the-switch instruction");
 await page.screenshot({ path: "verify/reshot-fda.png" });
 console.log("PASS: permission banner + guided FDA dialog verified locally");
 await browser.close();
