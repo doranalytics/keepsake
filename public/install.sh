@@ -87,6 +87,7 @@ cat > "$PLIST" <<EOF
   <key>EnvironmentVariables</key>
   <dict>
     <key>PATH</key><string>$(dirname "$NODE_BIN"):/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+    <key>SIDENOTE_MANAGED</key><string>1</string>
   </dict>
   <key>RunAtLoad</key><true/>
   <key>KeepAlive</key><true/>
@@ -114,10 +115,8 @@ echo "open http://localhost:$PORT (worth a bookmark) — or visit"
 echo "https://sidenote.lol and click “Open Sidenote”."
 echo ""
 echo "Next step in the app: click “Sync your Messages”."
-echo "macOS will need Full Disk Access for Terminal — the app has a button"
-echo "that opens the right settings pane, then relaunch Terminal and re-run:"
-echo ""
-echo "  curl -fsSL https://sidenote.lol/install.sh | bash"
+echo "macOS will ask for one permission (Full Disk Access) — Sidenote walks"
+echo "you through it right in the app, buttons and all."
 echo ""
 echo "Optional, for on-device AI: Sidenote sets up Ollama and a local model"
 echo "from inside the app — nothing ever leaves your Mac."

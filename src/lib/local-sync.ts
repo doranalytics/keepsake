@@ -78,9 +78,7 @@ export function formatIdentifier(id: string): string {
 
 export class PermissionError extends Error {
   constructor() {
-    super(
-      "Sidenote can't read your Messages database. Grant Full Disk Access to your terminal (System Settings → Privacy & Security → Full Disk Access), then restart Sidenote — re-run the install command, or restart `npm run dev` — and sync again."
-    );
+    super("Sidenote needs Full Disk Access to read your Messages.");
     this.name = "PermissionError";
   }
 }

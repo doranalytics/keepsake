@@ -34,4 +34,5 @@ export type AppStatus = {
     model: string | null;
     models: { name: string; size: number }[];
   };
+  engine?: string; // path of the node binary that needs Full Disk Access (local mode)
 };

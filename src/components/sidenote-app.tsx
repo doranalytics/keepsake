@@ -9,7 +9,15 @@ import { NotesPanel } from "@/components/notes-panel";
 import { AiPanel } from "@/components/ai-panel";
 import { LandingPage } from "@/components/landing-page";
 import { SettingsDialog } from "@/components/settings-dialog";
+import { FdaGuide } from "@/components/fda-guide";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
@@ -20,6 +28,8 @@ export function SidenoteApp() {
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [syncError, setSyncError] = useState<string | null>(null);
+  const [syncPermission, setSyncPermission] = useState(false);
+  const [fdaOpen, setFdaOpen] = useState(false);
   const [active, setActive] = useState<{ threadId: string; messageId: number | null } | null>(null);
   const [panel, setPanel] = useState<"notes" | "ai">("notes");
   const [sheetOpen, setSheetOpen] = useState(false);
@@ -50,10 +60,14 @@ export function SidenoteApp() {
   const sync = async () => {
     setSyncing(true);
     setSyncError(null);
+    setSyncPermission(false);
     try {
       const res = await fetch("/api/sync", { method: "POST" });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "Sync failed.");
+      if (!res.ok) {
+        setSyncPermission(!!data.permission);
+        throw new Error(data.error ?? "Sync failed.");
+      }
       await refresh();
     } catch (e) {
       setSyncError((e as Error).message);
@@ -71,7 +85,13 @@ export function SidenoteApp() {
 
   if (needsSetup) {
     return (
-      <SetupScreen syncing={syncing} error={syncError} onSync={sync} />
+      <SetupScreen
+        syncing={syncing}
+        error={syncError}
+        permission={syncPermission}
+        engine={status?.engine}
+        onSync={sync}
+      />
     );
   }
 
@@ -107,6 +127,17 @@ export function SidenoteApp() {
           {syncError && (
             <div className="shrink-0 bg-amber-100 px-4 py-2 text-[12px] leading-snug text-amber-900 dark:bg-amber-950 dark:text-amber-200">
               {syncError}
+              {syncPermission && (
+                <>
+                  {" "}
+                  <button
+                    onClick={() => setFdaOpen(true)}
+                    className="font-semibold underline underline-offset-2"
+                  >
+                    Show me how to grant it
+                  </button>
+                </>
+              )}
             </div>
           )}
           <div className="min-h-0 flex-1">
@@ -186,6 +217,18 @@ export function SidenoteApp() {
       </Sheet>
 
       <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} status={status} />
+
+      <Dialog open={fdaOpen} onOpenChange={setFdaOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-[15px]">Grant Full Disk Access</DialogTitle>
+            <DialogDescription className="sr-only">
+              Steps to let Sidenote read your Messages.
+            </DialogDescription>
+          </DialogHeader>
+          <FdaGuide engine={status?.engine} />
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -193,10 +236,14 @@ export function SidenoteApp() {
 function SetupScreen({
   syncing,
   error,
+  permission,
+  engine,
   onSync,
 }: {
   syncing: boolean;
   error: string | null;
+  permission: boolean;
+  engine?: string;
   onSync: () => void;
 }) {
   return (
@@ -233,25 +280,23 @@ function SetupScreen({
             "Sync your Messages"
           )}
         </Button>
-        {error && (
+        {error && !permission && (
           <div className="mt-4 rounded-xl bg-amber-50 p-3 text-[13px] leading-relaxed text-amber-900 dark:bg-amber-950 dark:text-amber-200">
             {error}
           </div>
         )}
-        <Button
-          variant="outline"
-          onClick={() => fetch("/api/open-settings", { method: "POST" })}
-          className="mt-3 h-10 w-full rounded-xl text-[13.5px]"
-        >
-          Open Full Disk Access settings
-        </Button>
-        <p className="mt-4 text-[12px] leading-relaxed text-muted-foreground">
-          First sync needs <span className="font-medium text-foreground">Full Disk Access</span>,
-          which macOS only lets you grant by hand: in the settings pane, enable the toggle for the
-          terminal app you launched Sidenote from (e.g. Terminal or iTerm), then relaunch it and
-          sync again. You&apos;re granting access to that app on your Mac — not to Sidenote&apos;s
-          code, and not to any AI or cloud service. Your messages never leave this computer.
-        </p>
+        {permission ? (
+          <div className="mt-4">
+            <FdaGuide engine={engine} />
+          </div>
+        ) : (
+          <p className="mt-4 text-[12px] leading-relaxed text-muted-foreground">
+            First sync needs one macOS permission (
+            <span className="font-medium text-foreground">Full Disk Access</span>
+            ). If it&apos;s missing, Sidenote will walk you through granting it —
+            three clicks, one time. Your messages never leave this computer.
+          </p>
+        )}
       </div>
     </div>
   );

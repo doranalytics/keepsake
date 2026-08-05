@@ -8,6 +8,7 @@ export async function GET() {
   const status = getStatus();
   if (!isDemo) {
     status.ollama = await detectOllama();
+    status.engine = process.execPath;
   }
   return NextResponse.json(status);
 }
