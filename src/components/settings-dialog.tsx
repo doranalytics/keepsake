@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Check, ExternalLink, RefreshCw, Sparkles } from "lucide-react";
-import type { AppStatus } from "@/lib/types";
+import { ArrowUpCircle, Check, ExternalLink, RefreshCw, Sparkles } from "lucide-react";
+import type { AppStatus, UpdateInfo } from "@/lib/types";
 import { resolveModel, saveModel } from "@/lib/model-pref";
 import { Button } from "@/components/ui/button";
 import {
@@ -17,14 +17,127 @@ import { cn } from "@/lib/utils";
 
 const gb = (bytes: number) => `${(bytes / 1e9).toFixed(0)} GB`;
 
+function UpdatesSection({
+  update,
+  updating,
+  onUpdate,
+  onCheckUpdate,
+}: {
+  update: UpdateInfo | null;
+  updating: boolean;
+  onUpdate?: () => void;
+  onCheckUpdate?: () => Promise<UpdateInfo | null>;
+}) {
+  const [checking, setChecking] = useState(false);
+  const [checked, setChecked] = useState(false);
+
+  const checkNow = async () => {
+    if (!onCheckUpdate) return;
+    setChecking(true);
+    try {
+      await onCheckUpdate();
+      setChecked(true);
+    } finally {
+      setChecking(false);
+    }
+  };
+
+  return (
+    <section>
+      <h3 className="text-[13px] font-semibold">Updates</h3>
+      {update?.currentDate && (
+        <p className="mt-1 text-[12px] text-muted-foreground">
+          Installed version: {update.currentDate}
+          {update.current && (
+            <span className="font-mono"> · {update.current.slice(0, 7)}</span>
+          )}
+        </p>
+      )}
+      {update?.updateAvailable ? (
+        <>
+          <div className="mt-2.5 rounded-xl border border-[#0a84ff]/25 bg-[#0a84ff]/5 p-3">
+            <p className="text-[13px] font-medium">
+              A new version is ready
+              {update.news[0] ? `: ${update.news[0].title}` : ""}
+            </p>
+            {update.news[0]?.points?.length ? (
+              <ul className="mt-1.5 space-y-1 text-[12.5px] text-muted-foreground">
+                {update.news[0].points.slice(0, 3).map((p) => (
+                  <li key={p} className="flex gap-1.5">
+                    <span className="text-[#0a84ff]">•</span>
+                    {p}
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+            <Button
+              size="sm"
+              onClick={onUpdate}
+              disabled={updating || !update.managed}
+              className="mt-2.5 h-8 rounded-lg bg-[#0a84ff] text-[12.5px] hover:bg-[#0974df]"
+            >
+              {updating ? (
+                <>
+                  <RefreshCw className="mr-1.5 size-3.5 animate-spin" />
+                  Updating — reloads when done…
+                </>
+              ) : (
+                <>
+                  <ArrowUpCircle className="mr-1.5 size-3.5" /> Update now
+                </>
+              )}
+            </Button>
+            {!update.managed && (
+              <p className="mt-2 text-[12px] text-muted-foreground">
+                You&apos;re running Sidenote by hand — update in Terminal with{" "}
+                <code className="rounded bg-black/[0.06] px-1 py-0.5 text-[11.5px] dark:bg-white/10">
+                  git pull && npm run build
+                </code>
+                , then restart it.
+              </p>
+            )}
+          </div>
+          <p className="mt-2 text-[12px] text-muted-foreground">
+            Takes about a minute; Sidenote restarts and reloads on its own.
+          </p>
+        </>
+      ) : (
+        <div className="mt-2 flex items-center justify-between gap-2">
+          <p className="text-[13px] text-muted-foreground">
+            {checked ? "You're up to date." : "Updates install with one click from here."}
+          </p>
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={checkNow}
+            disabled={checking}
+            className="h-7 shrink-0 rounded-lg px-2 text-[12.5px] text-muted-foreground"
+          >
+            <RefreshCw className={cn("mr-1 size-3.5", checking && "animate-spin")} />
+            Check now
+          </Button>
+        </div>
+      )}
+    </section>
+  );
+}
+
 export function SettingsDialog({
   open,
   onOpenChange,
   status,
+  update,
+  updating,
+  onUpdate,
+  onCheckUpdate,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   status: AppStatus | null;
+  update?: UpdateInfo | null;
+  updating?: boolean;
+  onUpdate?: () => void;
+  onCheckUpdate?: () => Promise<UpdateInfo | null>;
 }) {
   const [ollama, setOllama] = useState<AppStatus["ollama"] | null>(
     status?.ollama ?? null
@@ -216,6 +329,19 @@ export function SettingsDialog({
               )}
             </p>
           </section>
+
+          {/* ---------- Updates ---------- */}
+          {!isDemo && (
+            <>
+              <Separator />
+              <UpdatesSection
+                update={update ?? null}
+                updating={!!updating}
+                onUpdate={onUpdate}
+                onCheckUpdate={onCheckUpdate}
+              />
+            </>
+          )}
 
           {/* ---------- Your data ---------- */}
           {!isDemo && status && (

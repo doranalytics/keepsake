@@ -1,8 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { MessageCircleHeart, RefreshCw, ShieldCheck } from "lucide-react";
-import type { AppStatus, Thread } from "@/lib/types";
+import { ArrowUpCircle, MessageCircleHeart, RefreshCw, ShieldCheck } from "lucide-react";
+import type { AppStatus, Thread, UpdateInfo } from "@/lib/types";
 import { ThreadList } from "@/components/thread-list";
 import { ThreadView } from "@/components/thread-view";
 import { NotesPanel } from "@/components/notes-panel";
@@ -35,6 +35,8 @@ export function SidenoteApp() {
   const [sheetOpen, setSheetOpen] = useState(false);
   const [showLanding, setShowLanding] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [update, setUpdate] = useState<UpdateInfo | null>(null);
+  const [updating, setUpdating] = useState(false);
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -66,6 +68,52 @@ export function SidenoteApp() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [status]);
+
+  // Check for a newer Sidenote once per app load (local installs only).
+  useEffect(() => {
+    if (status?.mode !== "local") return;
+    fetch("/api/update")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((u: UpdateInfo | null) => u && setUpdate(u))
+      .catch(() => {});
+  }, [status?.mode]);
+
+  const checkForUpdate = async () => {
+    const u = await fetch("/api/update?fresh=1")
+      .then((r) => (r.ok ? r.json() : null))
+      .catch(() => null);
+    if (u) setUpdate(u);
+    return u as UpdateInfo | null;
+  };
+
+  const applyUpdate = async () => {
+    if (updating) return;
+    setUpdating(true);
+    const res = await fetch("/api/update", { method: "POST" })
+      .then((r) => r.json())
+      .catch(() => null);
+    if (!res?.ok) {
+      setUpdating(false);
+      return;
+    }
+    // Pull + rebuild + relaunch runs in the background; when the server
+    // comes back on the new commit, reload into it.
+    const target = update?.latest;
+    for (;;) {
+      await new Promise((r) => setTimeout(r, 8000));
+      try {
+        const u = (await fetch("/api/update", { cache: "no-store" }).then((r) =>
+          r.json()
+        )) as UpdateInfo;
+        if (u.current && (!target || u.current === target)) {
+          location.reload();
+          return;
+        }
+      } catch {
+        // server mid-restart — keep waiting
+      }
+    }
+  };
 
   const sync = async () => {
     setSyncing(true);
@@ -132,6 +180,25 @@ export function SidenoteApp() {
               className="shrink-0 bg-[#0a84ff] px-4 py-1.5 text-center text-[12px] font-medium text-white transition-colors hover:bg-[#0974df]"
             >
               Sample data — get Sidenote for your own messages →
+            </button>
+          )}
+          {status?.mode === "local" && update?.updateAvailable && (
+            <button
+              onClick={applyUpdate}
+              disabled={updating}
+              className="flex shrink-0 items-center justify-center gap-1.5 bg-[#0a84ff] px-4 py-1.5 text-center text-[12px] font-medium text-white transition-colors hover:bg-[#0974df] disabled:opacity-80"
+            >
+              {updating ? (
+                <>
+                  <RefreshCw className="size-3.5 animate-spin" />
+                  Updating — Sidenote will reload itself…
+                </>
+              ) : (
+                <>
+                  <ArrowUpCircle className="size-3.5" />
+                  Update available{update.news[0] ? `: ${update.news[0].title}` : ""} — install now
+                </>
+              )}
             </button>
           )}
           {syncError && (
@@ -226,7 +293,15 @@ export function SidenoteApp() {
         </SheetContent>
       </Sheet>
 
-      <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} status={status} />
+      <SettingsDialog
+        open={settingsOpen}
+        onOpenChange={setSettingsOpen}
+        status={status}
+        update={update}
+        updating={updating}
+        onUpdate={applyUpdate}
+        onCheckUpdate={checkForUpdate}
+      />
 
       <Dialog open={fdaOpen} onOpenChange={setFdaOpen}>
         <DialogContent className="sm:max-w-md">

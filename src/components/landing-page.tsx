@@ -4,6 +4,7 @@
 
 import { useEffect, useState } from "react";
 import { ArrowUpRight, Check, ChevronDown, Copy, Lock } from "lucide-react";
+import { CHANGELOG } from "@/lib/changelog";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -296,6 +297,43 @@ export function LandingPage({ onEnterDemo }: { onEnterDemo: () => void }) {
               />
             </figure>
           ))}
+        </div>
+
+        {/* What's new */}
+        <div className="mx-auto mb-20 max-w-2xl border-t border-black/[0.06] pt-14 dark:border-white/10">
+          <p className="text-[13px] font-semibold tracking-wide text-[#0a84ff] uppercase">
+            What&apos;s new
+          </p>
+          <h2 className="mt-2 text-[28px] leading-tight font-semibold tracking-tight md:text-[34px]">
+            Sidenote keeps getting better
+          </h2>
+          <div className="mt-9 space-y-9 text-left">
+            {CHANGELOG.map((entry) => (
+              <div key={entry.title} className="flex flex-col gap-1.5 sm:flex-row sm:gap-6">
+                <span className="w-24 shrink-0 pt-0.5 text-[12.5px] text-[#6e6e73] sm:text-right dark:text-[#a1a1a6]">
+                  {entry.date}
+                </span>
+                <div className="min-w-0">
+                  <p className="text-[16px] font-semibold tracking-tight">{entry.title}</p>
+                  <ul className="mt-1.5 space-y-1">
+                    {entry.points.map((point) => (
+                      <li
+                        key={point}
+                        className="flex gap-2 text-[13.5px] leading-relaxed text-[#6e6e73] dark:text-[#a1a1a6]"
+                      >
+                        <span className="mt-[7px] size-1 shrink-0 rounded-full bg-[#0a84ff]" />
+                        {point}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
+            ))}
+          </div>
+          <p className="mt-10 text-center text-[13px] text-[#6e6e73] dark:text-[#a1a1a6]">
+            Already installed? Sidenote offers new versions right in the app — one click, no
+            Terminal.
+          </p>
         </div>
       </main>
 

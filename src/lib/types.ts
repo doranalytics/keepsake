@@ -36,3 +36,12 @@ export type AppStatus = {
   };
   engine?: string; // path of the node binary that needs Full Disk Access (local mode)
 };
+
+export type UpdateInfo = {
+  current: string | null; // installed git sha
+  currentDate: string | null; // installed commit date (YYYY-MM-DD)
+  latest: string | null; // newest sha on GitHub main
+  updateAvailable: boolean;
+  managed: boolean; // running under the LaunchAgent (can self-update)
+  news: { date: string; title: string; points: string[] }[];
+};
