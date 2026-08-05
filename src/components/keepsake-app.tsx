@@ -207,9 +207,19 @@ function SetupScreen({
             {error}
           </div>
         )}
-        <p className="mt-4 text-center text-[12px] text-muted-foreground">
-          First sync needs Full Disk Access for your terminal so Keepsake can read the Messages
-          database.
+        <Button
+          variant="outline"
+          onClick={() => fetch("/api/open-settings", { method: "POST" })}
+          className="mt-3 h-10 w-full rounded-xl text-[13.5px]"
+        >
+          Open Full Disk Access settings
+        </Button>
+        <p className="mt-4 text-[12px] leading-relaxed text-muted-foreground">
+          First sync needs <span className="font-medium text-foreground">Full Disk Access</span>,
+          which macOS only lets you grant by hand: in the settings pane, enable the toggle for the
+          terminal app you launched Keepsake from (e.g. Terminal or iTerm), then relaunch it and
+          sync again. You&apos;re granting access to that app on your Mac — not to Keepsake&apos;s
+          code, and not to any AI or cloud service. Your messages never leave this computer.
         </p>
       </div>
     </div>

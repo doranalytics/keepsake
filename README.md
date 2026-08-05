@@ -34,7 +34,11 @@ Two permissions matter:
 
 1. **Full Disk Access** for your terminal app (System Settings → Privacy &
    Security → Full Disk Access) so Keepsake can read the Messages database.
-   Restart the terminal after granting it.
+   The setup screen has an "Open Full Disk Access settings" button that jumps
+   straight to the right pane — macOS doesn't allow apps to grant this
+   themselves, so you flip the toggle for the terminal app you launch Keepsake
+   from, then restart that terminal. The grant goes to your terminal app on
+   your Mac, not to any cloud or AI service.
 2. **Ollama running** (`ollama serve`, plus e.g. `ollama pull qwen3.6`) if you
    want the AI features. Everything works without it except summarize/ask.
 
