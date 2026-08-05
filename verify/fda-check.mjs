@@ -35,6 +35,8 @@ for (const label of [
   if (!(await page.locator(`button:has-text("${label}")`).count()))
     fail(`guide is missing button: ${label}`);
 }
+if (!(await page.locator("text=Sidenote Engine").count()))
+  fail("guide does not mention the friendly 'Sidenote Engine' name");
 await page.screenshot({ path: "verify/reshot-fda.png" });
 console.log("PASS: permission banner + guided FDA dialog verified locally");
 await browser.close();

@@ -9,8 +9,11 @@ import { Button } from "@/components/ui/button";
 // every needed action one click away and spell out the drag in between.
 export function FdaGuide({ engine }: { engine?: string | null }) {
   const [restarting, setRestarting] = useState<"waiting" | "manual" | null>(null);
+  const engineName = engine?.split("/").pop() ?? "Sidenote Engine";
 
   const restart = async () => {
+    // After the relaunch, the app re-syncs on its own — see SidenoteApp.
+    localStorage.setItem("sidenote-fda-resync", "1");
     const res = await fetch("/api/restart", { method: "POST" })
       .then((r) => r.json())
       .catch(() => null);
@@ -67,10 +70,10 @@ export function FdaGuide({ engine }: { engine?: string | null }) {
       ),
       hint: (
         <>
-          A Finder window opens with a file called{" "}
-          <span className="font-medium text-foreground">node</span> selected —
-          that&apos;s the engine. Drag it into the Full Disk Access list and turn
-          its switch on. macOS may ask for your password.
+          A Finder window opens with{" "}
+          <span className="font-medium text-foreground">{engineName}</span>{" "}
+          selected. Drag that file into the Full Disk Access list and turn its
+          switch on. macOS may ask for your password.
         </>
       ),
     },
@@ -101,7 +104,7 @@ export function FdaGuide({ engine }: { engine?: string | null }) {
             this page.
           </span>
         ) : (
-          "The new permission only kicks in after a restart. Takes a few seconds, then sync again."
+          "Applies the new permission: Sidenote restarts, this page reloads, and your messages sync automatically."
         ),
     },
   ];

@@ -65,8 +65,16 @@ else
   step "Already up to date — just relaunching…"
 fi
 
-step "Setting Sidenote to start automatically when you log in…"
+step "Setting up the Sidenote engine…"
+# A named copy of node makes the Full Disk Access list read "Sidenote Engine"
+# instead of "node", and gives the permission a stable home that survives
+# node upgrades.
 NODE_BIN="$(command -v node)"
+ENGINE="$DIR/Sidenote Engine"
+rm -f "$ENGINE"
+cp "$NODE_BIN" "$ENGINE"
+
+step "Setting Sidenote to start automatically when you log in…"
 PLIST="$HOME/Library/LaunchAgents/lol.sidenote.app.plist"
 mkdir -p "$HOME/Library/LaunchAgents"
 cat > "$PLIST" <<EOF
@@ -77,7 +85,7 @@ cat > "$PLIST" <<EOF
   <key>Label</key><string>lol.sidenote.app</string>
   <key>ProgramArguments</key>
   <array>
-    <string>$NODE_BIN</string>
+    <string>$ENGINE</string>
     <string>$DIR/node_modules/next/dist/bin/next</string>
     <string>start</string>
     <string>-p</string>

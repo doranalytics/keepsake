@@ -57,6 +57,16 @@ export function SidenoteApp() {
     refresh();
   }, [refresh]);
 
+  // Finish the Full Disk Access flow: after the guide restarts the server,
+  // sync kicks off on its own so the user never has to know to re-click it.
+  useEffect(() => {
+    if (status?.mode === "local" && localStorage.getItem("sidenote-fda-resync")) {
+      localStorage.removeItem("sidenote-fda-resync");
+      sync();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [status]);
+
   const sync = async () => {
     setSyncing(true);
     setSyncError(null);
