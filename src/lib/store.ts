@@ -83,7 +83,7 @@ export function getStatus(): AppStatus {
       lastSync: Date.now(),
       threadCount: demoThreads.length,
       messageCount: [...demoMessages.values()].reduce((n, m) => n + m.length, 0),
-      ollama: { available: false, model: null },
+      ollama: { running: false, model: null, models: [] },
     };
   }
   const db = openIndex();
@@ -94,7 +94,7 @@ export function getStatus(): AppStatus {
       lastSync: null,
       threadCount: 0,
       messageCount: 0,
-      ollama: { available: false, model: null },
+      ollama: { running: false, model: null, models: [] },
     };
   }
   const lastSync = db
@@ -106,7 +106,7 @@ export function getStatus(): AppStatus {
     lastSync: lastSync ? Number(lastSync.value) : null,
     threadCount: (db.prepare("SELECT COUNT(*) c FROM threads").get() as { c: number }).c,
     messageCount: (db.prepare("SELECT COUNT(*) c FROM messages").get() as { c: number }).c,
-    ollama: { available: false, model: null }, // filled in by the status route
+    ollama: { running: false, model: null, models: [] }, // filled in by the status route
   };
 }
 

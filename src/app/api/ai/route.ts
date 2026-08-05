@@ -19,15 +19,17 @@ export async function POST(req: NextRequest) {
     threadId: string;
     mode: "summarize" | "ask";
     question?: string;
+    model?: string;
   };
   const thread = getThread(body.threadId);
   if (!thread) {
     return NextResponse.json({ error: "Thread not found" }, { status: 404 });
   }
   const ollama = await detectOllama();
-  if (!ollama.available || !ollama.model) {
+  const model = body.model ?? ollama.model;
+  if (!ollama.running || !model) {
     return NextResponse.json(
-      { error: "Ollama isn't running. Start it with `ollama serve` and try again." },
+      { error: "Ollama isn't running. Open the Ollama app and try again." },
       { status: 503 }
     );
   }
@@ -40,7 +42,7 @@ export async function POST(req: NextRequest) {
       : `Here are the recent messages:\n\n${context}\n\nQuestion: ${body.question ?? ""}\n\nAnswer based only on the messages above. If the answer isn't in them, say so.`;
 
   try {
-    const stream = await streamChat(ollama.model, system, user);
+    const stream = await streamChat(model, system, user);
     return new Response(stream, {
       headers: { "Content-Type": "text/plain; charset=utf-8" },
     });

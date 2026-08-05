@@ -29,5 +29,9 @@ export type AppStatus = {
   lastSync: number | null;
   threadCount: number;
   messageCount: number;
-  ollama: { available: boolean; model: string | null };
+  ollama: {
+    running: boolean;
+    model: string | null;
+    models: { name: string; size: number }[];
+  };
 };

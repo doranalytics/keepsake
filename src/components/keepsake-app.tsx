@@ -7,7 +7,7 @@ import { ThreadList } from "@/components/thread-list";
 import { ThreadView } from "@/components/thread-view";
 import { NotesPanel } from "@/components/notes-panel";
 import { AiPanel } from "@/components/ai-panel";
-import { OnboardingDialog } from "@/components/onboarding-dialog";
+import { LandingPage } from "@/components/landing-page";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -22,7 +22,7 @@ export function KeepsakeApp() {
   const [active, setActive] = useState<{ threadId: string; messageId: number | null } | null>(null);
   const [panel, setPanel] = useState<"notes" | "ai">("notes");
   const [sheetOpen, setSheetOpen] = useState(false);
-  const [onboardingOpen, setOnboardingOpen] = useState(false);
+  const [showLanding, setShowLanding] = useState(false);
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -34,7 +34,7 @@ export function KeepsakeApp() {
       setStatus(s);
       setThreads(t.threads ?? []);
       if (s.mode === "demo" && !localStorage.getItem("keepsake-onboarded")) {
-        setOnboardingOpen(true);
+        setShowLanding(true);
       }
     } finally {
       setLoading(false);
@@ -73,6 +73,17 @@ export function KeepsakeApp() {
     );
   }
 
+  if (status?.mode === "demo" && showLanding) {
+    return (
+      <LandingPage
+        onEnterDemo={() => {
+          localStorage.setItem("keepsake-onboarded", "1");
+          setShowLanding(false);
+        }}
+      />
+    );
+  }
+
   return (
     <div className="flex h-dvh overflow-hidden">
       {/* sidebar */}
@@ -85,10 +96,10 @@ export function KeepsakeApp() {
         <div className="flex h-full flex-col">
           {status?.mode === "demo" && (
             <button
-              onClick={() => setOnboardingOpen(true)}
+              onClick={() => setShowLanding(true)}
               className="shrink-0 bg-[#0a84ff] px-4 py-1.5 text-center text-[12px] font-medium text-white transition-colors hover:bg-[#0974df]"
             >
-              Sample data — set up Keepsake for your own messages →
+              Sample data — get Keepsake for your own messages →
             </button>
           )}
           {syncError && (
@@ -136,14 +147,6 @@ export function KeepsakeApp() {
           </div>
         )}
       </main>
-
-      <OnboardingDialog
-        open={onboardingOpen}
-        onOpenChange={(o) => {
-          setOnboardingOpen(o);
-          if (!o) localStorage.setItem("keepsake-onboarded", "1");
-        }}
-      />
 
       {/* notes / AI side sheet */}
       <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>

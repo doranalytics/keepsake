@@ -1,24 +1,35 @@
-const OLLAMA = process.env.OLLAMA_URL ?? "http://localhost:11434";
+export const OLLAMA = process.env.OLLAMA_URL ?? "http://localhost:11434";
 
-export async function detectOllama(): Promise<{
-  available: boolean;
-  model: string | null;
-}> {
+export type OllamaInfo = {
+  running: boolean;
+  models: { name: string; size: number }[];
+  model: string | null; // preferred default
+};
+
+export async function detectOllama(): Promise<OllamaInfo> {
   try {
     const res = await fetch(`${OLLAMA}/api/tags`, {
       signal: AbortSignal.timeout(1500),
     });
-    if (!res.ok) return { available: false, model: null };
-    const data = (await res.json()) as { models?: { name: string }[] };
-    const models = data.models ?? [];
-    if (models.length === 0) return { available: false, model: null };
-    const preferred =
-      process.env.OLLAMA_MODEL ??
-      (models.find((m) => m.name.toLowerCase().includes("qwen"))?.name ||
-        models[0].name);
-    return { available: true, model: preferred };
+    if (!res.ok) return { running: false, models: [], model: null };
+    const data = (await res.json()) as {
+      models?: { name: string; size?: number }[];
+    };
+    const models = (data.models ?? []).map((m) => ({
+      name: m.name,
+      size: m.size ?? 0,
+    }));
+    let model = process.env.OLLAMA_MODEL ?? null;
+    if (!model) {
+      // Prefer the largest Qwen build, then the largest anything.
+      const bySize = [...models].sort((a, b) => b.size - a.size);
+      model =
+        (bySize.find((m) => m.name.toLowerCase().includes("qwen")) ?? bySize[0])
+          ?.name ?? null;
+    }
+    return { running: true, models, model };
   } catch {
-    return { available: false, model: null };
+    return { running: false, models: [], model: null };
   }
 }
 
@@ -35,6 +46,7 @@ export async function streamChat(
       model,
       stream: true,
       think: false,
+      keep_alive: "30m", // keep the model warm in RAM between questions
       options: { temperature: 0.3 },
       messages: [
         { role: "system", content: system },
@@ -64,7 +76,6 @@ export async function streamChat(
         try {
           const chunk = JSON.parse(line) as {
             message?: { content?: string };
-            done?: boolean;
           };
           const content = chunk.message?.content;
           if (content) controller.enqueue(encoder.encode(content));
