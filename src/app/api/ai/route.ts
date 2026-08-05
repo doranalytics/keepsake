@@ -1,0 +1,50 @@
+import { NextRequest, NextResponse } from "next/server";
+import { getRecentText, getThread, isDemo } from "@/lib/store";
+import { detectOllama, streamChat } from "@/lib/ollama";
+
+export const dynamic = "force-dynamic";
+export const maxDuration = 300;
+
+export async function POST(req: NextRequest) {
+  if (isDemo) {
+    return NextResponse.json(
+      {
+        error:
+          "AI runs on-device via Ollama and is available when Keepsake runs on your Mac.",
+      },
+      { status: 400 }
+    );
+  }
+  const body = (await req.json()) as {
+    threadId: string;
+    mode: "summarize" | "ask";
+    question?: string;
+  };
+  const thread = getThread(body.threadId);
+  if (!thread) {
+    return NextResponse.json({ error: "Thread not found" }, { status: 404 });
+  }
+  const ollama = await detectOllama();
+  if (!ollama.available || !ollama.model) {
+    return NextResponse.json(
+      { error: "Ollama isn't running. Start it with `ollama serve` and try again." },
+      { status: 503 }
+    );
+  }
+
+  const context = getRecentText(body.threadId);
+  const system = `You are Keepsake, a private on-device assistant that helps the user remember and understand their iMessage conversations. The conversation below is between the user ("Me") and ${thread.name}. Be concise, warm, and concrete. Never invent details that aren't in the messages.`;
+  const user =
+    body.mode === "summarize"
+      ? `Here are the recent messages:\n\n${context}\n\nSummarize this conversation: the key facts, plans, and anything worth remembering about ${thread.name}. Use short bullet points.`
+      : `Here are the recent messages:\n\n${context}\n\nQuestion: ${body.question ?? ""}\n\nAnswer based only on the messages above. If the answer isn't in them, say so.`;
+
+  try {
+    const stream = await streamChat(ollama.model, system, user);
+    return new Response(stream, {
+      headers: { "Content-Type": "text/plain; charset=utf-8" },
+    });
+  } catch (e) {
+    return NextResponse.json({ error: (e as Error).message }, { status: 502 });
+  }
+}
