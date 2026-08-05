@@ -1,0 +1,12 @@
+
+> sidenote@0.1.0 start
+> next start
+
+▲ Next.js 16.3.0
+- Local:         http://localhost:4747
+- Network:       http://192.168.0.146:4747
+✓ Ready in 65ms
+⚠ Warning: Next.js ignored package-lock.json in /Users/briandoran because it is outside the current Git repository (/Users/briandoran/Sidenote).
+ To use this directory, set `outputFileTracingRoot` in your Next.js config.
+
+✓ Running next.config.ts took 15ms
