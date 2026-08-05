@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getRecentText, getThread, isDemo } from "@/lib/store";
+import { getRecentText, getThread, isDemo, retrieveRelevantText } from "@/lib/store";
 import { detectOllama, streamChat } from "@/lib/ollama";
 
 export const dynamic = "force-dynamic";
@@ -34,12 +34,22 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const context = getRecentText(body.threadId);
+  const { text: context, earliest } = getRecentText(body.threadId);
+  // Questions also search the thread's entire history for relevant older
+  // messages, so answers aren't limited to the recent window.
+  const older =
+    body.mode === "ask" && body.question
+      ? retrieveRelevantText(body.threadId, body.question, earliest || Date.now())
+      : "";
   const system = `You are Sidenote, a private on-device assistant that helps the user remember and understand their iMessage conversations. The conversation below is between the user ("Me") and ${thread.name}. Be concise, warm, and concrete. Never invent details that aren't in the messages.`;
   const user =
     body.mode === "summarize"
       ? `Here are the recent messages:\n\n${context}\n\nSummarize this conversation: the key facts, plans, and anything worth remembering about ${thread.name}. Use short bullet points.`
-      : `Here are the recent messages:\n\n${context}\n\nQuestion: ${body.question ?? ""}\n\nAnswer based only on the messages above. If the answer isn't in them, say so.`;
+      : `${
+          older
+            ? `Older messages from this conversation that may relate to the question (found by searching the full history):\n\n${older}\n\n`
+            : ""
+        }Here are the recent messages:\n\n${context}\n\nQuestion: ${body.question ?? ""}\n\nAnswer based only on the messages above. If the answer isn't in them, say so.`;
 
   try {
     const stream = await streamChat(model, system, user);

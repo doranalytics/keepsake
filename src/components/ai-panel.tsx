@@ -265,8 +265,8 @@ export function AiPanel({
           <div className="pt-6 text-center">
             <p className="text-sm font-semibold">Ask about this thread</p>
             <p className="mx-auto mt-1 max-w-[30ch] text-[13px] text-muted-foreground">
-              Answers come from {model ?? "your local model"}, running on your Mac. Nothing leaves
-              your computer.
+              Questions search this thread&apos;s entire history. Answers come from{" "}
+              {model ?? "your local model"}, on your Mac — nothing leaves your computer.
             </p>
             <Button
               size="sm"

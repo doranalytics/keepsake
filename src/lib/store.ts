@@ -212,25 +212,123 @@ export function getMessages(
 }
 
 // Recent context for AI summarize / ask.
-export function getRecentText(threadId: string, maxChars = 12000): string {
-  const { messages } = isDemo
-    ? { messages: demoMessages.get(threadId) ?? [] }
-    : getMessages(threadId, {});
+const aiLine = (m: Message) =>
+  `[${new Date(m.date).toLocaleDateString()}] ${
+    m.isFromMe ? "Me" : m.sender || "Them"
+  }: ${m.text}`;
+
+export function getRecentText(
+  threadId: string,
+  maxChars = 20000
+): { text: string; earliest: number } {
+  // Queried directly (not via the paged reader) so the AI window isn't
+  // capped at one UI page of messages.
+  let messages: Message[];
+  if (isDemo) {
+    messages = demoMessages.get(threadId) ?? [];
+  } else {
+    const db = openIndex();
+    if (!db) return { text: "", earliest: 0 };
+    messages = (
+      db
+        .prepare(
+          `SELECT * FROM messages WHERE thread_id = ?
+           ORDER BY date DESC, id DESC LIMIT 800`
+        )
+        .all(threadId) as MsgRow[]
+    )
+      .map(toMessage)
+      .reverse();
+  }
   const lines: string[] = [];
   let total = 0;
+  let earliest = 0;
   for (let i = messages.length - 1; i >= 0; i--) {
     const m = messages[i];
-    const line = `[${new Date(m.date).toLocaleDateString()}] ${
-      m.isFromMe ? "Me" : m.sender || "Them"
-    }: ${m.text}`;
+    const line = aiLine(m);
     total += line.length;
     if (total > maxChars) break;
     lines.push(line);
+    earliest = m.date;
   }
-  return lines.reverse().join("\n");
+  return { text: lines.reverse().join("\n"), earliest };
 }
 
-const EXPORT_CAP = 50000;
+const STOPWORDS = new Set(
+  ("a an and are as at be been but by can could did do does for from get got had has have he her him " +
+    "his how i in is it its me my of on or our she should so tell that the their them then there these " +
+    "they this those to us was we were what when where which who why will with would you your").split(" ")
+);
+
+// Lexical RAG: search the thread's ENTIRE history for messages matching the
+// question, pull each hit with a couple of neighbors for context, and format
+// them for the model prompt. beforeDate excludes the recent window the model
+// already sees, so no tokens are wasted on duplicates.
+export function retrieveRelevantText(
+  threadId: string,
+  question: string,
+  beforeDate: number,
+  maxChars = 12000
+): string {
+  if (isDemo) return "";
+  const db = openIndex();
+  if (!db) return "";
+  const terms = Array.from(
+    new Set(
+      question
+        .toLowerCase()
+        .split(/[^\p{L}\p{N}]+/u)
+        .filter((t) => t.length >= 3 || /^\d+$/.test(t))
+        .filter((t) => !STOPWORDS.has(t))
+    )
+  ).slice(0, 12);
+  if (!terms.length) return "";
+  const ftsQuery = terms.map((t) => `"${t.replace(/"/g, "")}"*`).join(" OR ");
+
+  let hits: MsgRow[];
+  try {
+    hits = db
+      .prepare(
+        `SELECT m.* FROM messages_fts JOIN messages m ON m.id = messages_fts.rowid
+         WHERE messages_fts MATCH ? AND m.thread_id = ? AND m.date < ?
+         ORDER BY bm25(messages_fts) LIMIT 24`
+      )
+      .all(ftsQuery, threadId, beforeDate) as MsgRow[];
+  } catch {
+    return ""; // malformed FTS query
+  }
+  if (!hits.length) return "";
+
+  const beforeStmt = db.prepare(
+    `SELECT * FROM messages WHERE thread_id = ? AND (date < ? OR (date = ? AND id < ?))
+     ORDER BY date DESC, id DESC LIMIT 2`
+  );
+  const afterStmt = db.prepare(
+    `SELECT * FROM messages WHERE thread_id = ? AND (date > ? OR (date = ? AND id > ?)) AND date < ?
+     ORDER BY date ASC, id ASC LIMIT 2`
+  );
+
+  // Best-ranked hits first, each with surrounding context, until the budget
+  // is spent; then everything is re-ordered chronologically for the model.
+  const picked = new Map<number, Message>();
+  let total = 0;
+  for (const h of hits) {
+    const window = [
+      ...(beforeStmt.all(threadId, h.date, h.date, h.id) as MsgRow[]),
+      h,
+      ...(afterStmt.all(threadId, h.date, h.date, h.id, beforeDate) as MsgRow[]),
+    ];
+    let added = 0;
+    for (const r of window) if (!picked.has(r.id)) added += r.text.length + 30;
+    if (total + added > maxChars) break;
+    total += added;
+    for (const r of window) if (!picked.has(r.id)) picked.set(r.id, toMessage(r));
+  }
+  return [...picked.values()]
+    .sort((a, b) => a.date - b.date || a.id - b.id)
+    .map(aiLine)
+    .join("\n");
+}
 
 export function exportThread(
   threadId: string,
@@ -248,9 +346,9 @@ export function exportThread(
       db
         .prepare(
           `SELECT * FROM messages WHERE thread_id = ? AND date >= ?
-           ORDER BY date ASC, id ASC LIMIT ?`
+           ORDER BY date ASC, id ASC`
         )
-        .all(threadId, since ?? 0, EXPORT_CAP) as MsgRow[]
+        .all(threadId, since ?? 0) as MsgRow[]
     ).map(toMessage);
   }
   const lines = msgs.map((m) => {
