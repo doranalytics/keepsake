@@ -15,7 +15,7 @@ import {
 } from "lucide-react";
 import type { Message, SearchResult, Thread } from "@/lib/types";
 import { formatListDate, formatSeparator } from "@/lib/format";
-import { addMessageToNotes } from "@/lib/notes";
+import { saveMessage } from "@/lib/notes";
 import {
   Dialog,
   DialogContent,
@@ -378,9 +378,9 @@ export function ThreadView({
           <button
             className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-[13.5px] hover:bg-black/[0.04] dark:hover:bg-white/[0.06]"
             onClick={() => {
-              addMessageToNotes(threadId, menu.m, thread?.name ?? "Them");
+              const fresh = saveMessage(threadId, menu.m);
               setMenu(null);
-              showFlash(`Saved to ${thread?.name ?? "this chat"}'s notes`);
+              showFlash(fresh ? "Saved — find it in Notes" : "Already saved");
             }}
           >
             <BookmarkPlus className="size-4 text-[#0a84ff]" />

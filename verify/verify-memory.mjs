@@ -13,16 +13,23 @@ await page.click("text=Explore the demo first").catch(() => {});
 await page.click("text=Maya Chen");
 await page.waitForSelector("[data-mid]", { timeout: 15000 }).catch(() => fail("thread"));
 
-// Right-click a bubble → "Remember this" → saved to notes
+// Right-click a bubble → "Remember this" → pinned as a bubble in Notes
 await page.click("text=his name is Baguette. I am not making this up", { button: "right" });
 await page.waitForSelector("text=Remember this", { timeout: 5000 }).catch(() => fail("context menu"));
 await page.click("text=Remember this");
-await page.waitForSelector("text=Saved to Maya Chen's notes", { timeout: 5000 }).catch(() => fail("flash"));
+await page.waitForSelector("text=Saved — find it in Notes", { timeout: 5000 }).catch(() => fail("flash"));
 await page.click('button[aria-label="Notes"]');
-await page.waitForSelector("textarea", { timeout: 5000 }).catch(() => fail("notes open"));
-const notes = await page.inputValue("textarea");
-if (!notes.includes("Baguette")) fail("note content not saved");
-await page.keyboard.press("Escape");
+await page.waitForSelector("text=Saved messages", { timeout: 5000 }).catch(() => fail("notes open"));
+const pinnedBubble = page
+  .getByRole("dialog")
+  .getByText("his name is Baguette. I am not making this up");
+if ((await pinnedBubble.count()) === 0) fail("pinned bubble not in notes");
+
+// Click the pinned bubble → jumps back to that position, highlighted
+await pinnedBubble.click();
+await page
+  .waitForSelector('[data-mid] .ring-2, [data-mid] [class*="ring-"]', { timeout: 15000 })
+  .catch(() => fail("jump-to-message highlight"));
 
 // Export dialog → copy path returns data
 await page.waitForTimeout(400);

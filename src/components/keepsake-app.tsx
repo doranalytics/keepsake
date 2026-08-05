@@ -158,7 +158,14 @@ export function KeepsakeApp() {
                 <TabsTrigger value="ai">Ask AI</TabsTrigger>
               </TabsList>
               <TabsContent value="notes" className="min-h-0 flex-1">
-                <NotesPanel threadId={active.threadId} threadName={activeThread?.name ?? ""} />
+                <NotesPanel
+                  threadId={active.threadId}
+                  threadName={activeThread?.name ?? ""}
+                  onJump={(messageId) => {
+                    setSheetOpen(false);
+                    select(active.threadId, messageId);
+                  }}
+                />
               </TabsContent>
               <TabsContent value="ai" className="min-h-0 flex-1">
                 <AiPanel
