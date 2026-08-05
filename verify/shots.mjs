@@ -61,6 +61,22 @@ await page.click('button[aria-label="Notes"]');
 await page.waitForSelector("text=Saved messages", { timeout: 10000 });
 await page.waitForTimeout(600);
 await page.screenshot({ path: "public/shot-notes.png" });
+await page.keyboard.press("Escape");
+await page.waitForTimeout(500);
+
+// 4) remember shot: right-click menu open on a message
+await page.click("text=his name is Baguette. I am not making this up", { button: "right" });
+await page.waitForSelector("text=Remember this", { timeout: 5000 });
+await page.waitForTimeout(300);
+await page.screenshot({ path: "public/shot-remember.png" });
+await page.keyboard.press("Escape");
+await page.waitForTimeout(400);
+
+// 5) export dialog shot
+await page.click('button[aria-label="Export conversation"]');
+await page.waitForSelector("text=Export conversation", { timeout: 5000 });
+await page.waitForTimeout(400);
+await page.screenshot({ path: "public/shot-export.png" });
 
 await browser.close();
 console.log("SHOTS CAPTURED");

@@ -1,6 +1,6 @@
 import { chromium } from "playwright";
 
-const URL = "https://keepsake-liard-rho.vercel.app";
+const URL = "https://sidenote.lol";
 const browser = await chromium.launch();
 const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
 const fail = (m) => {
@@ -9,7 +9,7 @@ const fail = (m) => {
 };
 
 await page.goto(URL, { waitUntil: "networkidle" });
-await page.click("text=Explore the demo first").catch(() => {});
+await page.click("text=Browse the demo").catch(() => {});
 await page.click("text=Maya Chen");
 await page.waitForSelector("[data-mid]", { timeout: 15000 }).catch(() => fail("thread"));
 

@@ -9,6 +9,29 @@ import { cn } from "@/lib/utils";
 
 const INSTALL_CMD = "curl -fsSL https://sidenote.lol/install.sh | bash";
 
+function SmallCopy({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <button
+      onClick={() => {
+        navigator.clipboard.writeText(text);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 1600);
+      }}
+      className="group mt-3 flex w-full items-center justify-between gap-3 rounded-xl bg-[#1d1d1f] px-4 py-3 text-left font-mono text-[13px] text-[#7ee787] transition-colors hover:bg-black dark:bg-black dark:ring-1 dark:ring-white/10"
+    >
+      <span className="min-w-0 truncate">{text}</span>
+      {copied ? (
+        <span className="flex shrink-0 items-center gap-1 font-sans text-[11px] font-medium text-white">
+          <Check className="size-3.5" /> Copied
+        </span>
+      ) : (
+        <Copy className="size-4 shrink-0 text-white/40 group-hover:text-white" />
+      )}
+    </button>
+  );
+}
+
 export function LandingPage({ onEnterDemo }: { onEnterDemo: () => void }) {
   const [showSetup, setShowSetup] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -98,7 +121,6 @@ export function LandingPage({ onEnterDemo }: { onEnterDemo: () => void }) {
               {[
                 <>Sidenote installs itself into <code className="rounded bg-black/[0.06] px-1 dark:bg-white/10">~/Sidenote</code> and opens in your browser — running entirely on your Mac.</>,
                 <>Flip one macOS switch (Full Disk Access) so it can read your Messages. Sidenote shows you exactly where.</>,
-                <>Optional AI: summaries and “ask this thread” run on a <span className="font-medium text-[#1d1d1f] dark:text-white">local model via Ollama</span> — Sidenote sets it up in-app. No cloud, no API keys, nothing uploaded.</>,
               ].map((step, i) => (
                 <li
                   key={i}
@@ -111,38 +133,76 @@ export function LandingPage({ onEnterDemo }: { onEnterDemo: () => void }) {
                 </li>
               ))}
             </ol>
+            <div className="mt-6 border-t border-black/[0.06] pt-5 dark:border-white/10">
+              <p className="text-[15px] font-semibold">
+                Optional: on-device AI{" "}
+                <span className="font-normal text-[#6e6e73] dark:text-[#a1a1a6]">
+                  — summaries &amp; “ask this thread”
+                </span>
+              </p>
+              <p className="mt-1 text-[13.5px] leading-relaxed text-[#6e6e73] dark:text-[#a1a1a6]">
+                AI runs on a local model through{" "}
+                <a
+                  href="https://ollama.com/download"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="font-medium text-[#0a84ff] underline underline-offset-2"
+                >
+                  Ollama
+                </a>{" "}
+                — free, no API keys, nothing uploaded. Install the Ollama app, then pull a model in
+                Terminal (or let Sidenote do it for you in-app):
+              </p>
+              <SmallCopy text="ollama pull qwen3.6:27b" />
+            </div>
           </div>
         )}
 
         <div className="mt-14 md:mt-20">
           <img
             src="/screenshot.png"
-            alt="Sidenote showing a conversation with search results"
+            alt="Sidenote showing a conversation"
             className="w-full rounded-xl border border-black/[0.08] shadow-2xl md:rounded-2xl dark:border-white/10"
           />
         </div>
 
-        <div className="mt-6 grid gap-6 pb-16 md:mt-8 md:grid-cols-2 md:gap-8">
-          <figure>
-            <img
-              src="/shot-search.png"
-              alt="Searching every conversation at once"
-              className="w-full rounded-xl border border-black/[0.08] shadow-xl dark:border-white/10"
-            />
-            <figcaption className="mt-3 text-[13.5px] font-medium text-[#6e6e73] dark:text-[#a1a1a6]">
-              Find anything, from any conversation, instantly.
-            </figcaption>
-          </figure>
-          <figure>
-            <img
-              src="/shot-notes.png"
-              alt="Pinned messages and notes on a person"
-              className="w-full rounded-xl border border-black/[0.08] shadow-xl dark:border-white/10"
-            />
-            <figcaption className="mt-3 text-[13.5px] font-medium text-[#6e6e73] dark:text-[#a1a1a6]">
-              Right-click any message to remember it — pinned beside your notes on that person.
-            </figcaption>
-          </figure>
+        <div className="mt-16 grid gap-x-8 gap-y-12 pb-16 text-left md:mt-24 md:grid-cols-2">
+          {[
+            {
+              img: "/shot-search.png",
+              title: "Search everything",
+              sub: "Instant full-text search across every conversation you've ever had. Click a result to jump to that exact moment.",
+            },
+            {
+              img: "/shot-remember.png",
+              title: "Remember any message",
+              sub: "Right-click a message and hit “Remember this.” No retyping, no screenshots.",
+            },
+            {
+              img: "/shot-notes.png",
+              title: "Notes on every person",
+              sub: "Saved messages and your own notes live side by side — a private memory for each relationship.",
+            },
+            {
+              img: "/shot-export.png",
+              title: "Export any conversation",
+              sub: "Copy a clean transcript of any time range, ready to paste into ChatGPT or Claude.",
+            },
+          ].map((f) => (
+            <figure key={f.title}>
+              <figcaption className="mb-3">
+                <p className="text-[19px] font-semibold tracking-tight">{f.title}</p>
+                <p className="mt-1 text-[13.5px] leading-relaxed text-[#6e6e73] dark:text-[#a1a1a6]">
+                  {f.sub}
+                </p>
+              </figcaption>
+              <img
+                src={f.img}
+                alt={f.title}
+                className="aspect-[8/5] w-full rounded-xl border border-black/[0.08] object-cover shadow-xl dark:border-white/10"
+              />
+            </figure>
+          ))}
         </div>
       </main>
 
