@@ -2,12 +2,92 @@
 
 /* eslint-disable @next/next/no-img-element */
 
-import { useState } from "react";
-import { Check, ChevronDown, Copy, Lock } from "lucide-react";
+import { useEffect, useState } from "react";
+import { ArrowUpRight, Check, ChevronDown, Copy, Lock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 const INSTALL_CMD = "curl -fsSL https://sidenote.lol/install.sh | bash";
+const APP_URL = "http://localhost:4747";
+
+// Probes the local install. A no-cors fetch resolves (opaque) if anything is
+// listening on the port; browsers allow https → http://localhost requests.
+function useLocalApp() {
+  const [running, setRunning] = useState<boolean | null>(null);
+  useEffect(() => {
+    let alive = true;
+    fetch(`${APP_URL}/api/status`, {
+      mode: "no-cors",
+      signal: AbortSignal.timeout(2500),
+    })
+      .then(() => alive && setRunning(true))
+      .catch(() => alive && setRunning(false));
+    return () => {
+      alive = false;
+    };
+  }, []);
+  return running;
+}
+
+function AlreadyInstalled({ running }: { running: boolean | null }) {
+  const [showHelp, setShowHelp] = useState(false);
+
+  if (running) {
+    return (
+      <div className="mt-8 flex justify-center">
+        <a
+          href={APP_URL}
+          className="group flex items-center gap-2.5 rounded-full border border-[#30d158]/30 bg-[#30d158]/10 py-2 pr-4 pl-3.5 text-[13.5px] font-medium text-[#1d1d1f] transition-colors hover:bg-[#30d158]/20 dark:text-[#f5f5f7]"
+        >
+          <span className="relative flex size-2">
+            <span className="absolute inline-flex size-full animate-ping rounded-full bg-[#30d158] opacity-60" />
+            <span className="relative inline-flex size-2 rounded-full bg-[#30d158]" />
+          </span>
+          Sidenote is running on this Mac — open it
+          <ArrowUpRight className="size-4 text-[#6e6e73] transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5 dark:text-[#a1a1a6]" />
+        </a>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-8 text-[13.5px] text-[#6e6e73] dark:text-[#a1a1a6]">
+      Already installed?{" "}
+      <a
+        href={APP_URL}
+        className="font-medium text-[#0a84ff] hover:underline"
+        onClick={() => setShowHelp(true)}
+      >
+        Open Sidenote →
+      </a>
+      {running === false && (
+        <>
+          {" · "}
+          <button
+            onClick={() => setShowHelp((s) => !s)}
+            className="font-medium text-[#0a84ff] hover:underline"
+          >
+            not starting?
+          </button>
+        </>
+      )}
+      {showHelp && (
+        <div className="mx-auto mt-4 max-w-md rounded-2xl border border-black/[0.08] bg-white p-5 text-left dark:border-white/10 dark:bg-[#141416]">
+          <p className="text-[13.5px] leading-relaxed text-[#6e6e73] dark:text-[#a1a1a6]">
+            Sidenote runs at{" "}
+            <span className="font-medium text-[#1d1d1f] dark:text-[#f5f5f7]">
+              {APP_URL.replace("http://", "")}
+            </span>
+            . If that page won&apos;t load (e.g. after a restart), paste the
+            install command into Terminal again — on an existing install it just
+            relaunches, in seconds:
+          </p>
+          <SmallCopy text={INSTALL_CMD} />
+        </div>
+      )}
+    </div>
+  );
+}
 
 function SmallCopy({ text }: { text: string }) {
   const [copied, setCopied] = useState(false);
@@ -35,6 +115,7 @@ function SmallCopy({ text }: { text: string }) {
 export function LandingPage({ onEnterDemo }: { onEnterDemo: () => void }) {
   const [showSetup, setShowSetup] = useState(false);
   const [copied, setCopied] = useState(false);
+  const running = useLocalApp();
 
   const copy = () => {
     navigator.clipboard.writeText(INSTALL_CMD);
@@ -46,12 +127,22 @@ export function LandingPage({ onEnterDemo }: { onEnterDemo: () => void }) {
     <div className="min-h-dvh overflow-y-auto bg-[#fbfbfd] text-[#1d1d1f] dark:bg-black dark:text-[#f5f5f7]">
       <header className="mx-auto flex max-w-5xl items-center justify-between px-6 py-5">
         <span className="text-[17px] font-semibold tracking-tight">Sidenote</span>
-        <button
-          onClick={onEnterDemo}
-          className="text-[13px] font-medium text-[#0a84ff] hover:underline"
-        >
-          Live demo
-        </button>
+        <div className="flex items-center gap-5">
+          {running && (
+            <a
+              href={APP_URL}
+              className="text-[13px] font-medium text-[#0a84ff] hover:underline"
+            >
+              Open Sidenote
+            </a>
+          )}
+          <button
+            onClick={onEnterDemo}
+            className="text-[13px] font-medium text-[#0a84ff] hover:underline"
+          >
+            Live demo
+          </button>
+        </div>
       </header>
 
       <main className="mx-auto max-w-3xl px-6 pt-10 text-center md:pt-20">
@@ -93,6 +184,8 @@ export function LandingPage({ onEnterDemo }: { onEnterDemo: () => void }) {
           <Lock className="size-3.5" />
           100% local — your messages never leave your Mac.
         </p>
+
+        <AlreadyInstalled running={running} />
 
         {showSetup && (
           <div className="mx-auto mt-10 max-w-2xl rounded-3xl border border-black/[0.08] bg-white p-7 text-left shadow-lg md:p-9 dark:border-white/10 dark:bg-[#141416]">

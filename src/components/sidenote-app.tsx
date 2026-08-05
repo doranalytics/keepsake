@@ -8,6 +8,7 @@ import { ThreadView } from "@/components/thread-view";
 import { NotesPanel } from "@/components/notes-panel";
 import { AiPanel } from "@/components/ai-panel";
 import { LandingPage } from "@/components/landing-page";
+import { SettingsDialog } from "@/components/settings-dialog";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -23,6 +24,7 @@ export function SidenoteApp() {
   const [panel, setPanel] = useState<"notes" | "ai">("notes");
   const [sheetOpen, setSheetOpen] = useState(false);
   const [showLanding, setShowLanding] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -116,6 +118,7 @@ export function SidenoteApp() {
               syncing={syncing}
               onSync={sync}
               onSelect={select}
+              onOpenSettings={() => setSettingsOpen(true)}
             />
           </div>
         </div>
@@ -181,6 +184,8 @@ export function SidenoteApp() {
           )}
         </SheetContent>
       </Sheet>
+
+      <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} status={status} />
     </div>
   );
 }

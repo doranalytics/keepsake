@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Search, RefreshCw, X } from "lucide-react";
+import { Search, RefreshCw, Settings, X } from "lucide-react";
 import type { AppStatus, SearchResult, Thread } from "@/lib/types";
 import { formatListDate } from "@/lib/format";
 import { AvatarBadge } from "@/components/avatar-badge";
@@ -40,6 +40,7 @@ export function ThreadList({
   syncing,
   onSync,
   onSelect,
+  onOpenSettings,
 }: {
   status: AppStatus | null;
   threads: Thread[];
@@ -48,6 +49,7 @@ export function ThreadList({
   syncing: boolean;
   onSync: () => void;
   onSelect: (threadId: string, messageId?: number) => void;
+  onOpenSettings: () => void;
 }) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<SearchResult[] | null>(null);
@@ -107,6 +109,16 @@ export function ThreadList({
                 {syncing ? "Syncing…" : "Sync"}
               </Button>
             )}
+            <Button
+              size="icon"
+              variant="ghost"
+              onClick={onOpenSettings}
+              title="Settings — AI model & more"
+              aria-label="Open settings"
+              className="size-8 text-muted-foreground"
+            >
+              <Settings className="size-4" />
+            </Button>
           </div>
         </div>
         <div className="relative">

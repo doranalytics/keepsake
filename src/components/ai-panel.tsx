@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { CircleStop, Download, RefreshCw, Send, Sparkles } from "lucide-react";
 import type { AppStatus } from "@/lib/types";
+import { onModelChange, resolveModel, saveModel } from "@/lib/model-pref";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
@@ -11,7 +12,6 @@ type Entry = { role: "user" | "ai"; text: string };
 type Ollama = AppStatus["ollama"];
 
 const DEFAULT_PULL = "qwen3.6:27b";
-const MODEL_KEY = "keepsake-ollama-model";
 
 const gb = (bytes: number) => `${(bytes / 1e9).toFixed(0)} GB`;
 
@@ -46,12 +46,13 @@ export function AiPanel({
     if (status?.ollama) setOllama(status.ollama);
   }, [status]);
 
-  // resolve the active model: user choice if still installed, else server default
+  // resolve the active model: user choice if still installed, else server
+  // default — and stay in sync when it changes in Settings
   useEffect(() => {
     if (!ollama) return;
-    const saved = localStorage.getItem(MODEL_KEY);
-    if (saved && ollama.models.some((m) => m.name === saved)) setModel(saved);
-    else setModel(ollama.model);
+    const apply = () => setModel(resolveModel(ollama.models, ollama.model));
+    apply();
+    return onModelChange(apply);
   }, [ollama]);
 
   useEffect(() => {
@@ -248,10 +249,7 @@ export function AiPanel({
           <span className="text-[11px] font-medium text-muted-foreground uppercase">Model</span>
           <select
             value={model ?? ""}
-            onChange={(e) => {
-              setModel(e.target.value);
-              localStorage.setItem(MODEL_KEY, e.target.value);
-            }}
+            onChange={(e) => saveModel(e.target.value)}
             className="h-7 flex-1 rounded-md border-none bg-black/[0.05] px-2 text-[12.5px] outline-none dark:bg-white/10"
           >
             {ollama.models.map((m) => (
