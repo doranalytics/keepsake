@@ -69,6 +69,25 @@ export function SidenoteApp() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [status]);
 
+  // Live mode: keep the sidebar fresh as new texts sync in the background.
+  useEffect(() => {
+    if (status?.mode !== "local" || !status.synced) return;
+    const t = setInterval(async () => {
+      if (document.hidden) return;
+      try {
+        const s = (await fetch("/api/status").then((r) => r.json())) as AppStatus;
+        if (s.lastSync !== status.lastSync) {
+          setStatus(s);
+          const tr = await fetch("/api/threads").then((r) => r.json());
+          setThreads(tr.threads ?? []);
+        }
+      } catch {
+        // transient — next tick
+      }
+    }, 10000);
+    return () => clearInterval(t);
+  }, [status?.mode, status?.synced, status?.lastSync]);
+
   // Check for a newer Sidenote once per app load (local installs only).
   useEffect(() => {
     if (status?.mode !== "local") return;
@@ -239,6 +258,7 @@ export function SidenoteApp() {
             key={`${active.threadId}:${active.messageId ?? "latest"}`}
             threadId={active.threadId}
             initialAnchor={active.messageId}
+            canSend={status?.mode === "local"}
             onBack={() => setActive(null)}
             onOpenPanel={(tab) => {
               setPanel(tab);

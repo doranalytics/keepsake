@@ -83,6 +83,39 @@ export class PermissionError extends Error {
   }
 }
 
+type AttRow = {
+  id: number;
+  filename: string | null;
+  mime_type: string | null;
+  transfer_name: string | null;
+};
+
+const expandHome = (p: string) =>
+  p.startsWith("~/") ? path.join(os.homedir(), p.slice(2)) : p;
+
+// Link-preview payloads and sticker plumbing aren't viewable files.
+function displayableAttachment(a: AttRow): boolean {
+  if (!a.filename) return false;
+  if (a.filename.includes("pluginPayload")) return false;
+  return true;
+}
+
+const EXT_MIME: Record<string, string> = {
+  jpg: "image/jpeg", jpeg: "image/jpeg", png: "image/png", gif: "image/gif",
+  heic: "image/heic", heif: "image/heif", webp: "image/webp", tiff: "image/tiff",
+  mov: "video/quicktime", mp4: "video/mp4", m4a: "audio/mp4", caf: "audio/x-caf",
+  pdf: "application/pdf",
+};
+
+function attMime(a: AttRow): string {
+  if (a.mime_type) return a.mime_type;
+  const ext = (a.filename ?? "").split(".").pop()?.toLowerCase() ?? "";
+  return EXT_MIME[ext] ?? "application/octet-stream";
+}
+
+const attName = (a: AttRow) =>
+  a.transfer_name || path.basename(a.filename ?? "attachment");
+
 function copyIntoRaw(src: string, destName: string): string {
   const dest = path.join(RAW_DIR, destName);
   fs.copyFileSync(src, dest);
@@ -95,6 +128,8 @@ function copyIntoRaw(src: string, destName: string): string {
   }
   return dest;
 }
+
+let contactsCache: Map<string, string> | null = null;
 
 // phone-digits / email → display name
 function loadContacts(): Map<string, string> {
@@ -279,6 +314,10 @@ export function runSync(): { threads: number; messages: number } {
       is_from_me INT, date INT, text TEXT
     );
     CREATE INDEX idx_msg_thread ON messages(thread_id, date);
+    CREATE TABLE attachments(
+      id INTEGER PRIMARY KEY, message_id INT, path TEXT, mime TEXT, name TEXT
+    );
+    CREATE INDEX idx_att_msg ON attachments(message_id);
     CREATE VIRTUAL TABLE messages_fts USING fts5(text, content='messages', content_rowid='id');
   `);
 
@@ -291,8 +330,26 @@ export function runSync(): { threads: number; messages: number } {
   const insertFts = out.prepare(
     "INSERT INTO messages_fts(rowid, text) VALUES (?, ?)"
   );
+  const insertAtt = out.prepare(
+    "INSERT OR IGNORE INTO attachments(id, message_id, path, mime, name) VALUES (?, ?, ?, ?, ?)"
+  );
+
+  // message rowid → displayable attachments (link-preview payloads excluded)
+  const attByMessage = new Map<number, AttRow[]>();
+  for (const a of src
+    .prepare(
+      `SELECT maj.message_id as mid, a.ROWID as id, a.filename, a.mime_type, a.transfer_name
+       FROM message_attachment_join maj JOIN attachment a ON a.ROWID = maj.attachment_id`
+    )
+    .all() as (AttRow & { mid: number })[]) {
+    if (!displayableAttachment(a)) continue;
+    const list = attByMessage.get(a.mid) ?? [];
+    list.push(a);
+    attByMessage.set(a.mid, list);
+  }
 
   let messageCount = 0;
+  let maxRowid = 0;
   const insertAll = out.transaction(() => {
     for (const t of threads.values()) {
       insertThread.run(t.id, t.name, JSON.stringify(t.participants), t.isGroup ? 1 : 0);
@@ -316,10 +373,12 @@ export function runSync(): { threads: number; messages: number } {
          AND COALESCE(m.item_type, 0) = 0`
     );
     for (const row of stmt.iterate() as IterableIterator<MsgRow>) {
+      if (row.id > maxRowid) maxRowid = row.id;
       const threadId = threadByChatRowid.get(row.chat_id);
       if (!threadId) continue;
       const text = extractText(row.text, row.attributedBody);
-      if (!text) continue; // attachments-only, reactions, etc.
+      const atts = attByMessage.get(row.id) ?? [];
+      if (!text && atts.length === 0) continue; // reactions, edits, etc.
       const sender =
         row.is_from_me || !row.handle ? "" : resolveName(row.handle, contacts);
       insertMsg.run(
@@ -328,9 +387,12 @@ export function runSync(): { threads: number; messages: number } {
         sender,
         row.is_from_me ? 1 : 0,
         appleToUnixMs(row.date),
-        text
+        text ?? ""
       );
-      insertFts.run(row.id, text);
+      if (text) insertFts.run(row.id, text);
+      for (const a of atts) {
+        insertAtt.run(a.id, row.id, expandHome(a.filename!), attMime(a), attName(a));
+      }
       messageCount++;
     }
     out.exec(`
@@ -346,6 +408,10 @@ export function runSync(): { threads: number; messages: number } {
   out
     .prepare("INSERT OR REPLACE INTO meta(key, value) VALUES ('lastSync', ?)")
     .run(String(Date.now()));
+  out
+    .prepare("INSERT OR REPLACE INTO meta(key, value) VALUES ('maxMsgRowid', ?)")
+    .run(String(maxRowid));
+  contactsCache = contacts; // live sync reuses the fresh map
 
   const threadCount = (
     out.prepare("SELECT COUNT(*) as c FROM threads").get() as { c: number }
@@ -353,4 +419,185 @@ export function runSync(): { threads: number; messages: number } {
   src.close();
   out.close();
   return { threads: threadCount, messages: messageCount };
+}
+
+// ---------- live mode ----------
+// A lightweight watcher: every few seconds, if Apple's chat.db changed, pull
+// just the new rows straight from the original database (readonly WAL reads
+// are snapshot-safe) into the existing index. Full syncs stay authoritative.
+
+let liveTimer: NodeJS.Timeout | null = null;
+let lastSeen = 0;
+let ticking = false;
+
+export function startLiveSync() {
+  if (liveTimer) return;
+  liveTimer = setInterval(() => {
+    if (ticking) return;
+    ticking = true;
+    try {
+      liveTick();
+    } catch {
+      // never let a bad tick kill the loop
+    } finally {
+      ticking = false;
+    }
+  }, 4000);
+  liveTimer.unref?.();
+}
+
+function liveTick() {
+  let mtime = 0;
+  try {
+    mtime = fs.statSync(CHAT_DB).mtimeMs;
+    try {
+      mtime = Math.max(mtime, fs.statSync(CHAT_DB + "-wal").mtimeMs);
+    } catch {
+      /* no WAL right now */
+    }
+  } catch {
+    return; // no Full Disk Access yet — wait for a manual sync to sort it out
+  }
+  if (mtime <= lastSeen) return;
+  if (!fs.existsSync(INDEX_DB)) return;
+  runIncrementalSync();
+  lastSeen = mtime;
+}
+
+export function runIncrementalSync(): number {
+  const Database = sqlite();
+  let src: InstanceType<typeof DatabaseType>;
+  try {
+    src = new Database(CHAT_DB, { readonly: true });
+  } catch {
+    return 0;
+  }
+  const out = new Database(INDEX_DB);
+  let added = 0;
+  try {
+    // older indexes predate the attachments table
+    out.exec(`
+      CREATE TABLE IF NOT EXISTS attachments(
+        id INTEGER PRIMARY KEY, message_id INT, path TEXT, mime TEXT, name TEXT
+      );
+      CREATE INDEX IF NOT EXISTS idx_att_msg ON attachments(message_id);
+    `);
+    const metaRow = out
+      .prepare("SELECT value FROM meta WHERE key = 'maxMsgRowid'")
+      .get() as { value: string } | undefined;
+    let maxRowid = metaRow
+      ? Number(metaRow.value)
+      : ((out.prepare("SELECT COALESCE(MAX(id), 0) as m FROM messages").get() as { m: number }).m);
+
+    type NewRow = {
+      id: number;
+      text: string | null;
+      attributedBody: Buffer | null;
+      is_from_me: number;
+      date: number;
+      handle: string | null;
+      chat_id: number;
+    };
+    const rows = src
+      .prepare(
+        `SELECT m.ROWID as id, m.text, m.attributedBody, m.is_from_me, m.date,
+                h.id as handle, cmj.chat_id as chat_id
+         FROM message m
+         JOIN chat_message_join cmj ON cmj.message_id = m.ROWID
+         LEFT JOIN handle h ON h.ROWID = m.handle_id
+         WHERE m.ROWID > ?
+           AND COALESCE(m.associated_message_type, 0) = 0
+           AND COALESCE(m.item_type, 0) = 0
+         ORDER BY m.ROWID ASC LIMIT 500`
+      )
+      .all(maxRowid) as NewRow[];
+    if (rows.length === 0) return 0;
+    if (!contactsCache) contactsCache = loadContacts();
+    const contacts = contactsCache;
+
+    const chatStmt = src.prepare(
+      "SELECT ROWID as rowid, guid, chat_identifier, display_name, style FROM chat WHERE ROWID = ?"
+    );
+    const partStmt = src.prepare(
+      `SELECT h.id as handle FROM chat_handle_join chj
+       JOIN handle h ON h.ROWID = chj.handle_id WHERE chj.chat_id = ?`
+    );
+    const attStmt = src.prepare(
+      `SELECT a.ROWID as id, a.filename, a.mime_type, a.transfer_name
+       FROM message_attachment_join maj JOIN attachment a ON a.ROWID = maj.attachment_id
+       WHERE maj.message_id = ?`
+    );
+    const threadExists = out.prepare("SELECT 1 FROM threads WHERE id = ?");
+    const insertThread = out.prepare(
+      "INSERT OR IGNORE INTO threads(id, name, participants, is_group) VALUES (?, ?, ?, ?)"
+    );
+    const insertMsg = out.prepare(
+      "INSERT OR IGNORE INTO messages(id, thread_id, sender, is_from_me, date, text) VALUES (?, ?, ?, ?, ?, ?)"
+    );
+    const insertFts = out.prepare("INSERT INTO messages_fts(rowid, text) VALUES (?, ?)");
+    const insertAtt = out.prepare(
+      "INSERT OR IGNORE INTO attachments(id, message_id, path, mime, name) VALUES (?, ?, ?, ?, ?)"
+    );
+
+    const touched = new Set<string>();
+    const apply = out.transaction(() => {
+      for (const row of rows) {
+        if (row.id > maxRowid) maxRowid = row.id;
+        const chat = chatStmt.get(row.chat_id) as
+          | { rowid: number; guid: string; chat_identifier: string | null; display_name: string | null; style: number }
+          | undefined;
+        if (!chat) continue;
+        const isGroup = chat.style === 43;
+        const identifier = chat.chat_identifier ?? chat.guid;
+        const threadId = isGroup ? `group:${chat.guid}` : `direct:${identifier}`;
+        if (!threadExists.get(threadId)) {
+          const handles = (partStmt.all(chat.rowid) as { handle: string }[]).map((h) => h.handle);
+          const names = (handles.length ? handles : [identifier]).map((h) => resolveName(h, contacts));
+          insertThread.run(
+            threadId,
+            isGroup
+              ? chat.display_name?.trim() || names.slice(0, 4).join(", ")
+              : names[0] ?? formatIdentifier(identifier),
+            JSON.stringify(names),
+            isGroup ? 1 : 0
+          );
+        }
+        const text = extractText(row.text, row.attributedBody);
+        const atts = (attStmt.all(row.id) as AttRow[]).filter(displayableAttachment);
+        if (!text && atts.length === 0) continue;
+        insertMsg.run(
+          row.id,
+          threadId,
+          row.is_from_me || !row.handle ? "" : resolveName(row.handle, contacts),
+          row.is_from_me ? 1 : 0,
+          appleToUnixMs(row.date),
+          text ?? ""
+        );
+        if (text) insertFts.run(row.id, text);
+        for (const a of atts) {
+          insertAtt.run(a.id, row.id, expandHome(a.filename!), attMime(a), attName(a));
+        }
+        touched.add(threadId);
+        added++;
+      }
+      for (const id of touched) {
+        out.prepare(
+          `UPDATE threads SET
+             message_count = (SELECT COUNT(*) FROM messages m WHERE m.thread_id = ?),
+             last_date = COALESCE((SELECT MAX(date) FROM messages m WHERE m.thread_id = ?), 0),
+             last_text = COALESCE((SELECT text FROM messages m WHERE m.thread_id = ? ORDER BY date DESC LIMIT 1), '')
+           WHERE id = ?`
+        ).run(id, id, id, id);
+      }
+      out.prepare("INSERT OR REPLACE INTO meta(key, value) VALUES ('maxMsgRowid', ?)").run(String(maxRowid));
+      if (added > 0) {
+        out.prepare("INSERT OR REPLACE INTO meta(key, value) VALUES ('lastSync', ?)").run(String(Date.now()));
+      }
+    });
+    apply();
+  } finally {
+    src.close();
+    out.close();
+  }
+  return added;
 }

@@ -10,6 +10,16 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    date: "Aug 6, 2026",
+    title: "Live threads, sending, and photos",
+    points: [
+      "New texts appear on their own, seconds after they arrive — no Sync button",
+      "Reply right from Sidenote: messages send through your real iMessage account",
+      "Photos and attachments now show up in conversations (HEIC included)",
+      "Links get rich previews with images, like the real Messages app",
+    ],
+  },
+  {
     date: "Aug 5, 2026",
     title: "Sidenote updates itself",
     points: [

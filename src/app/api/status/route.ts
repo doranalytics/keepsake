@@ -9,6 +9,11 @@ export async function GET() {
   if (!isDemo) {
     status.ollama = await detectOllama();
     status.engine = process.execPath;
+    if (status.synced) {
+      // live mode: new texts flow into the index within seconds
+      const { startLiveSync } = await import("@/lib/local-sync");
+      startLiveSync();
+    }
   }
   return NextResponse.json(status);
 }

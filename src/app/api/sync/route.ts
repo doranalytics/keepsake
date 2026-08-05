@@ -12,9 +12,10 @@ export async function POST() {
     );
   }
   try {
-    const { runSync } = await import("@/lib/local-sync");
+    const { runSync, startLiveSync } = await import("@/lib/local-sync");
     const result = runSync();
     invalidateStore();
+    startLiveSync();
     return NextResponse.json(result);
   } catch (e) {
     const err = e as Error;

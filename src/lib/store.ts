@@ -182,7 +182,7 @@ export function getMessages(
         )
         .all(threadId, anchor.date, anchor.date, anchor.id, AROUND) as MsgRow[];
       return {
-        messages: [...before.reverse(), anchor, ...after].map(toMessage),
+        messages: attachMedia(db, [...before.reverse(), anchor, ...after].map(toMessage)),
         hasEarlier: before.length === AROUND,
         hasLater: after.length === AROUND,
       };
@@ -205,10 +205,60 @@ export function getMessages(
           .all(threadId, PAGE)
   ) as MsgRow[];
   return {
-    messages: rows.reverse().map(toMessage),
+    messages: attachMedia(db, rows.reverse().map(toMessage)),
     hasEarlier: rows.length === PAGE,
     hasLater: false,
   };
+}
+
+// Decorate a page of messages with their attachments in one query.
+// Older indexes (pre-attachments) just return the messages unchanged.
+function attachMedia(db: Db, messages: Message[]): Message[] {
+  if (messages.length === 0) return messages;
+  try {
+    const rows = db
+      .prepare(
+        `SELECT id, message_id, mime, name FROM attachments
+         WHERE message_id IN (${messages.map(() => "?").join(",")})`
+      )
+      .all(...messages.map((m) => m.id)) as {
+      id: number;
+      message_id: number;
+      mime: string;
+      name: string;
+    }[];
+    if (rows.length === 0) return messages;
+    const byMsg = new Map<number, { id: number; mime: string; name: string }[]>();
+    for (const r of rows) {
+      const list = byMsg.get(r.message_id) ?? [];
+      list.push({ id: r.id, mime: r.mime, name: r.name });
+      byMsg.set(r.message_id, list);
+    }
+    for (const m of messages) {
+      const list = byMsg.get(m.id);
+      if (list) m.attachments = list;
+    }
+  } catch {
+    // attachments table missing — re-sync will add it
+  }
+  return messages;
+}
+
+export function getAttachment(
+  id: number
+): { path: string; mime: string; name: string } | null {
+  if (isDemo) return null;
+  const db = openIndex();
+  if (!db) return null;
+  try {
+    return (
+      (db
+        .prepare("SELECT path, mime, name FROM attachments WHERE id = ?")
+        .get(id) as { path: string; mime: string; name: string } | undefined) ?? null
+    );
+  } catch {
+    return null;
+  }
 }
 
 // Recent context for AI summarize / ask.
@@ -232,7 +282,7 @@ export function getRecentText(
     messages = (
       db
         .prepare(
-          `SELECT * FROM messages WHERE thread_id = ?
+          `SELECT * FROM messages WHERE thread_id = ? AND text != ''
            ORDER BY date DESC, id DESC LIMIT 800`
         )
         .all(threadId) as MsgRow[]
@@ -300,11 +350,11 @@ export function retrieveRelevantText(
   if (!hits.length) return "";
 
   const beforeStmt = db.prepare(
-    `SELECT * FROM messages WHERE thread_id = ? AND (date < ? OR (date = ? AND id < ?))
+    `SELECT * FROM messages WHERE thread_id = ? AND text != '' AND (date < ? OR (date = ? AND id < ?))
      ORDER BY date DESC, id DESC LIMIT 2`
   );
   const afterStmt = db.prepare(
-    `SELECT * FROM messages WHERE thread_id = ? AND (date > ? OR (date = ? AND id > ?)) AND date < ?
+    `SELECT * FROM messages WHERE thread_id = ? AND text != '' AND (date > ? OR (date = ? AND id > ?)) AND date < ?
      ORDER BY date ASC, id ASC LIMIT 2`
   );
 
@@ -345,7 +395,7 @@ export function exportThread(
     msgs = (
       db
         .prepare(
-          `SELECT * FROM messages WHERE thread_id = ? AND date >= ?
+          `SELECT * FROM messages WHERE thread_id = ? AND date >= ? AND text != ''
            ORDER BY date ASC, id ASC`
         )
         .all(threadId, since ?? 0) as MsgRow[]

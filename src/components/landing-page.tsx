@@ -167,7 +167,7 @@ export function LandingPage({ onEnterDemo }: { onEnterDemo: () => void }) {
             onClick={() => setShowSetup((s) => !s)}
             className="h-12 rounded-full bg-[#0a84ff] px-7 text-[15px] font-medium hover:bg-[#0974df]"
           >
-            Get Sidenote for Mac
+            Download Sidenote for Mac
             <ChevronDown
               className={cn("ml-1 size-4 transition-transform", showSetup && "rotate-180")}
             />
@@ -213,8 +213,8 @@ export function LandingPage({ onEnterDemo }: { onEnterDemo: () => void }) {
             </button>
             <ol className="mt-5 space-y-3">
               {[
-                <>Sidenote installs itself into <code className="rounded bg-black/[0.06] px-1 dark:bg-white/10">~/Sidenote</code> and opens in your browser — running entirely on your Mac.</>,
-                <>Flip one macOS switch (Full Disk Access) so it can read your Messages. Sidenote shows you exactly where.</>,
+                <>This installs the real Sidenote app on your Mac — it lives in <code className="rounded bg-black/[0.06] px-1 dark:bg-white/10">~/Sidenote</code>, starts automatically when you log in, and opens in your browser at localhost:4747.</>,
+                <>Flip one macOS switch (Full Disk Access) so it can read your Messages. Sidenote walks you through it, buttons and all.</>,
               ].map((step, i) => (
                 <li
                   key={i}

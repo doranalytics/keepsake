@@ -8,13 +8,20 @@ export type Thread = {
   messageCount: number;
 };
 
+export type Attachment = {
+  id: number;
+  mime: string;
+  name: string;
+};
+
 export type Message = {
   id: number;
   threadId: string;
   sender: string; // display name of sender ("" when from me)
   isFromMe: boolean;
   date: number; // unix ms
-  text: string;
+  text: string; // "" for attachment-only messages
+  attachments?: Attachment[];
 };
 
 export type SearchResult = {

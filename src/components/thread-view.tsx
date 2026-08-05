@@ -3,12 +3,14 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ArrowDown,
+  ArrowUp,
   BookmarkPlus,
   Check,
   ChevronLeft,
   Copy,
   FileDown,
   NotebookPen,
+  Paperclip,
   Search,
   Sparkles,
   X,
@@ -35,11 +37,13 @@ const GAP_FOR_SEPARATOR = 3600_000; // 1h
 export function ThreadView({
   threadId,
   initialAnchor,
+  canSend,
   onBack,
   onOpenPanel,
 }: {
   threadId: string;
   initialAnchor: number | null;
+  canSend: boolean;
   onBack: () => void;
   onOpenPanel: (tab: "notes" | "ai") => void;
 }) {
@@ -57,6 +61,9 @@ export function ThreadView({
   const [menu, setMenu] = useState<{ x: number; y: number; m: Message } | null>(null);
   const [flash, setFlash] = useState<string | null>(null);
   const [exportOpen, setExportOpen] = useState(false);
+  const [draft, setDraft] = useState("");
+  const [sending, setSending] = useState(false);
+  const [pending, setPending] = useState<{ text: string; at: number }[]>([]);
   const scrollRef = useRef<HTMLDivElement>(null);
   const pendingScroll = useRef<"bottom" | number | null>("bottom");
   const flashTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -115,6 +122,68 @@ export function ThreadView({
   useEffect(() => {
     load(anchor);
   }, [load, anchor]);
+
+  // Live mode: while viewing the latest page, quietly refresh so incoming
+  // texts appear on their own.
+  useEffect(() => {
+    if (!canSend || anchor !== null) return;
+    const t = setInterval(async () => {
+      if (document.hidden || loading) return;
+      try {
+        const res = await fetch(`/api/threads/${encodeURIComponent(threadId)}/messages`);
+        if (!res.ok) return;
+        const data = await res.json();
+        const incoming = data.messages as Message[];
+        setThread(data.thread);
+        // drop optimistic bubbles once the real message lands (or times out)
+        setPending((p) =>
+          p.filter(
+            (pm) =>
+              !incoming.some((m) => m.isFromMe && m.text === pm.text) &&
+              Date.now() - pm.at < 30000
+          )
+        );
+        setMessages((prev) => {
+          const prevLast = prev[prev.length - 1]?.id;
+          const nextLast = incoming[incoming.length - 1]?.id;
+          if (prevLast === nextLast && prev.length >= incoming.length) return prev;
+          const el = scrollRef.current;
+          if (el && el.scrollHeight - el.scrollTop - el.clientHeight < 160) {
+            pendingScroll.current = "bottom";
+          }
+          return incoming;
+        });
+      } catch {
+        // transient — try again next tick
+      }
+    }, 5000);
+    return () => clearInterval(t);
+  }, [canSend, anchor, threadId, loading]);
+
+  useEffect(() => setPending([]), [threadId]);
+
+  const send = async () => {
+    const text = draft.trim();
+    if (!text || sending) return;
+    setSending(true);
+    try {
+      const res = await fetch("/api/send", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ threadId, text }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Couldn't send.");
+      setDraft("");
+      setPending((p) => [...p, { text, at: Date.now() }]);
+      pendingScroll.current = "bottom";
+      setMessages((m) => [...m]); // trigger scroll
+    } catch (e) {
+      showFlash((e as Error).message);
+    } finally {
+      setSending(false);
+    }
+  };
 
   // scroll into place after messages render
   useEffect(() => {
@@ -340,19 +409,63 @@ export function ThreadView({
                         });
                       }}
                       className={cn(
-                        "max-w-[78%] rounded-2xl px-3.5 py-1.5 text-[15px] leading-snug whitespace-pre-wrap md:max-w-[65%]",
-                        m.isFromMe
-                          ? "bg-[#0a84ff] text-white"
-                          : "bg-[#e9e9eb] text-black dark:bg-[#26262a] dark:text-white",
-                        anchor === m.id && "ring-2 ring-[#ffcc00] ring-offset-2 ring-offset-background"
+                        "flex max-w-[78%] flex-col gap-1 md:max-w-[65%]",
+                        m.isFromMe ? "items-end" : "items-start"
                       )}
                     >
-                      {m.text}
+                      {m.attachments
+                        ?.filter((a) => a.mime.startsWith("image/"))
+                        .map((a) => (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            key={a.id}
+                            src={`/api/attachments/${a.id}`}
+                            alt={a.name}
+                            loading="lazy"
+                            className="max-h-80 max-w-full rounded-2xl border border-black/[0.06] object-contain dark:border-white/10"
+                          />
+                        ))}
+                      {m.attachments
+                        ?.filter((a) => !a.mime.startsWith("image/"))
+                        .map((a) => (
+                          <a
+                            key={a.id}
+                            href={`/api/attachments/${a.id}`}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-[13px] text-muted-foreground hover:bg-black/[0.03] dark:hover:bg-white/[0.05]"
+                          >
+                            <Paperclip className="size-3.5 shrink-0" />
+                            <span className="max-w-[24ch] truncate">{a.name}</span>
+                          </a>
+                        ))}
+                      {m.text && (
+                        <div
+                          className={cn(
+                            "rounded-2xl px-3.5 py-1.5 text-[15px] leading-snug whitespace-pre-wrap",
+                            m.isFromMe
+                              ? "bg-[#0a84ff] text-white"
+                              : "bg-[#e9e9eb] text-black dark:bg-[#26262a] dark:text-white",
+                            anchor === m.id &&
+                              "ring-2 ring-[#ffcc00] ring-offset-2 ring-offset-background"
+                          )}
+                        >
+                          {m.text}
+                        </div>
+                      )}
+                      {firstUrl(m.text) && <LinkPreview url={firstUrl(m.text)!} />}
                     </div>
                   </div>
                 </div>
               );
             })}
+            {pending.map((p) => (
+              <div key={p.at} className="flex justify-end pb-0.5">
+                <div className="max-w-[78%] rounded-2xl bg-[#0a84ff]/70 px-3.5 py-1.5 text-[15px] leading-snug whitespace-pre-wrap text-white md:max-w-[65%]">
+                  {p.text}
+                </div>
+              </div>
+            ))}
             {hasLater && (
               <div className="sticky bottom-0 pt-2 text-center">
                 <Button
@@ -368,6 +481,34 @@ export function ThreadView({
           </>
         )}
       </div>
+
+      {/* compose */}
+      {canSend && (
+        <form
+          className="flex shrink-0 items-center gap-2 border-t bg-background p-3"
+          onSubmit={(e) => {
+            e.preventDefault();
+            send();
+          }}
+        >
+          <Input
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            placeholder={`Message ${thread?.name ?? ""}…`}
+            disabled={sending}
+            className="h-9 rounded-full border-none bg-black/[0.06] shadow-none dark:bg-white/10"
+          />
+          <Button
+            type="submit"
+            size="icon"
+            disabled={!draft.trim() || sending}
+            aria-label="Send message"
+            className="size-9 shrink-0 rounded-full bg-[#0a84ff] hover:bg-[#0974df]"
+          >
+            <ArrowUp className="size-4.5" />
+          </Button>
+        </form>
+      )}
 
       {/* right-click menu on a message */}
       {menu && (
@@ -536,5 +677,64 @@ function ExportDialog({
         </div>
       </DialogContent>
     </Dialog>
+  );
+}
+
+// ---------- link previews ----------
+
+const URL_RE = /https?:\/\/[^\s<>"')\]]+/;
+const firstUrl = (text: string): string | null => text.match(URL_RE)?.[0] ?? null;
+
+type Og = {
+  url: string;
+  title: string | null;
+  description: string | null;
+  image: string | null;
+  site: string;
+};
+const ogCache = new Map<string, Promise<Og>>();
+
+function fetchOg(url: string): Promise<Og> {
+  let p = ogCache.get(url);
+  if (!p) {
+    p = fetch(`/api/og?url=${encodeURIComponent(url)}`).then((r) => {
+      if (!r.ok) throw new Error("no preview");
+      return r.json();
+    });
+    ogCache.set(url, p);
+  }
+  return p;
+}
+
+function LinkPreview({ url }: { url: string }) {
+  const [og, setOg] = useState<Og | null>(null);
+  useEffect(() => {
+    let alive = true;
+    fetchOg(url)
+      .then((o) => alive && setOg(o))
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [url]);
+  if (!og || (!og.title && !og.image)) return null;
+  return (
+    <a
+      href={og.url}
+      target="_blank"
+      rel="noreferrer"
+      className="block max-w-[280px] overflow-hidden rounded-2xl border border-black/[0.08] bg-background text-left transition-shadow hover:shadow-md dark:border-white/10"
+    >
+      {og.image && (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={og.image} alt="" loading="lazy" className="max-h-40 w-full object-cover" />
+      )}
+      <span className="block px-3 py-2">
+        {og.title && (
+          <span className="block truncate text-[13px] leading-snug font-medium">{og.title}</span>
+        )}
+        <span className="block truncate text-[11.5px] text-muted-foreground">{og.site}</span>
+      </span>
+    </a>
   );
 }
