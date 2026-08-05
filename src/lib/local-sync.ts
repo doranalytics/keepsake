@@ -79,7 +79,7 @@ export function formatIdentifier(id: string): string {
 export class PermissionError extends Error {
   constructor() {
     super(
-      "Keepsake can't read your Messages database. Grant Full Disk Access to your terminal (System Settings → Privacy & Security → Full Disk Access), restart the terminal, and sync again."
+      "Keepsake can't read your Messages database. Grant Full Disk Access to your terminal (System Settings → Privacy & Security → Full Disk Access), then restart Keepsake — re-run the install command, or restart `npm run dev` — and sync again."
     );
     this.name = "PermissionError";
   }
