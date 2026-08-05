@@ -2,9 +2,26 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
+  metadataBase: new URL("https://sidenote.lol"),
   title: "Sidenote — remember your conversations",
   description:
     "An iMessage companion. Search everything you've ever texted, keep notes on the people you care about, and ask on-device AI about any thread.",
+  openGraph: {
+    title: "Sidenote — every text, remembered",
+    description:
+      "Search your entire iMessage history, pin the moments that matter, and ask AI about any conversation. 100% on your Mac.",
+    url: "https://sidenote.lol",
+    siteName: "Sidenote",
+    type: "website",
+    images: [{ url: "/og.png", width: 1200, height: 630, alt: "Sidenote" }],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Sidenote — every text, remembered",
+    description:
+      "Search your entire iMessage history, pin the moments that matter, and ask AI about any conversation. 100% on your Mac.",
+    images: ["/og.png"],
+  },
   manifest: "/manifest.webmanifest",
   icons: {
     icon: "/icon-512.png",
