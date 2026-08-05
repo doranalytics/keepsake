@@ -3,8 +3,10 @@
 import { useEffect, useRef, useState } from "react";
 import { Textarea } from "@/components/ui/textarea";
 
+import { notesKey } from "@/lib/notes";
+
 export function NotesPanel({ threadId, threadName }: { threadId: string; threadName: string }) {
-  const key = `keepsake-notes:${threadId}`;
+  const key = notesKey(threadId);
   const [value, setValue] = useState("");
   const [saved, setSaved] = useState(true);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);

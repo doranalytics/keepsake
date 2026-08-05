@@ -3,7 +3,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ArrowDown,
+  BookmarkPlus,
+  Check,
   ChevronLeft,
+  Copy,
+  FileDown,
   NotebookPen,
   Search,
   Sparkles,
@@ -11,6 +15,14 @@ import {
 } from "lucide-react";
 import type { Message, SearchResult, Thread } from "@/lib/types";
 import { formatListDate, formatSeparator } from "@/lib/format";
+import { addMessageToNotes } from "@/lib/notes";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { AvatarBadge } from "@/components/avatar-badge";
 import { Snippet } from "@/components/thread-list";
 import { Button } from "@/components/ui/button";
@@ -42,8 +54,31 @@ export function ThreadView({
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQ, setSearchQ] = useState("");
   const [searchResults, setSearchResults] = useState<SearchResult[] | null>(null);
+  const [menu, setMenu] = useState<{ x: number; y: number; m: Message } | null>(null);
+  const [flash, setFlash] = useState<string | null>(null);
+  const [exportOpen, setExportOpen] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const pendingScroll = useRef<"bottom" | number | null>("bottom");
+  const flashTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const showFlash = (text: string) => {
+    setFlash(text);
+    if (flashTimer.current) clearTimeout(flashTimer.current);
+    flashTimer.current = setTimeout(() => setFlash(null), 2200);
+  };
+
+  useEffect(() => {
+    if (!menu) return;
+    const close = () => setMenu(null);
+    window.addEventListener("click", close);
+    window.addEventListener("scroll", close, true);
+    window.addEventListener("keydown", close);
+    return () => {
+      window.removeEventListener("click", close);
+      window.removeEventListener("scroll", close, true);
+      window.removeEventListener("keydown", close);
+    };
+  }, [menu]);
 
   useEffect(() => {
     setAnchor(initialAnchor);
@@ -178,6 +213,14 @@ export function ThreadView({
         >
           <Search className="size-4.5" />
         </Button>
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={() => setExportOpen(true)}
+          aria-label="Export conversation"
+        >
+          <FileDown className="size-4.5" />
+        </Button>
         <Button variant="ghost" size="icon" onClick={() => onOpenPanel("notes")} aria-label="Notes">
           <NotebookPen className="size-4.5" />
         </Button>
@@ -288,6 +331,14 @@ export function ThreadView({
                   )}
                   <div className={cn("flex pb-0.5", m.isFromMe ? "justify-end" : "justify-start")}>
                     <div
+                      onContextMenu={(e) => {
+                        e.preventDefault();
+                        setMenu({
+                          x: Math.min(e.clientX, window.innerWidth - 200),
+                          y: Math.min(e.clientY, window.innerHeight - 110),
+                          m,
+                        });
+                      }}
                       className={cn(
                         "max-w-[78%] rounded-2xl px-3.5 py-1.5 text-[15px] leading-snug whitespace-pre-wrap md:max-w-[65%]",
                         m.isFromMe
@@ -317,6 +368,173 @@ export function ThreadView({
           </>
         )}
       </div>
+
+      {/* right-click menu on a message */}
+      {menu && (
+        <div
+          className="fixed z-50 w-48 overflow-hidden rounded-xl border bg-background py-1 shadow-lg"
+          style={{ left: menu.x, top: menu.y }}
+        >
+          <button
+            className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-[13.5px] hover:bg-black/[0.04] dark:hover:bg-white/[0.06]"
+            onClick={() => {
+              addMessageToNotes(threadId, menu.m, thread?.name ?? "Them");
+              setMenu(null);
+              showFlash(`Saved to ${thread?.name ?? "this chat"}'s notes`);
+            }}
+          >
+            <BookmarkPlus className="size-4 text-[#0a84ff]" />
+            Remember this
+          </button>
+          <button
+            className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-[13.5px] hover:bg-black/[0.04] dark:hover:bg-white/[0.06]"
+            onClick={() => {
+              navigator.clipboard.writeText(menu.m.text);
+              setMenu(null);
+              showFlash("Copied");
+            }}
+          >
+            <Copy className="size-4 text-muted-foreground" />
+            Copy text
+          </button>
+        </div>
+      )}
+
+      {/* confirmation pill */}
+      {flash && (
+        <div className="pointer-events-none absolute bottom-6 left-1/2 z-50 flex -translate-x-1/2 items-center gap-1.5 rounded-full bg-foreground px-4 py-2 text-[13px] font-medium text-background shadow-lg">
+          <Check className="size-3.5" />
+          {flash}
+        </div>
+      )}
+
+      <ExportDialog
+        open={exportOpen}
+        onOpenChange={setExportOpen}
+        threadId={threadId}
+        threadName={thread?.name ?? "conversation"}
+        onDone={showFlash}
+      />
     </div>
+  );
+}
+
+const RANGES = [
+  { label: "Last 30 days", days: 30 },
+  { label: "Last 3 months", days: 91 },
+  { label: "Last year", days: 365 },
+  { label: "Everything", days: null as number | null },
+];
+
+function ExportDialog({
+  open,
+  onOpenChange,
+  threadId,
+  threadName,
+  onDone,
+}: {
+  open: boolean;
+  onOpenChange: (o: boolean) => void;
+  threadId: string;
+  threadName: string;
+  onDone: (msg: string) => void;
+}) {
+  const [rangeIdx, setRangeIdx] = useState(1);
+  const [busy, setBusy] = useState<"copy" | "download" | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const fetchExport = async () => {
+    const days = RANGES[rangeIdx].days;
+    const since = days ? Date.now() - days * 86400000 : 0;
+    const res = await fetch(
+      `/api/threads/${encodeURIComponent(threadId)}/export?since=${since}`
+    );
+    if (!res.ok) throw new Error("Export failed.");
+    return (await res.json()) as { text: string; count: number };
+  };
+
+  const doCopy = async () => {
+    setBusy("copy");
+    setError(null);
+    try {
+      const { text, count } = await fetchExport();
+      await navigator.clipboard.writeText(text);
+      onOpenChange(false);
+      onDone(`Copied ${count.toLocaleString()} messages — paste into any AI`);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const doDownload = async () => {
+    setBusy("download");
+    setError(null);
+    try {
+      const { text, count } = await fetchExport();
+      const blob = new Blob([text], { type: "text/plain" });
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = `${threadName.replace(/[^\w -]/g, "")} - Keepsake export.txt`;
+      a.click();
+      URL.revokeObjectURL(a.href);
+      onOpenChange(false);
+      onDone(`Downloaded ${count.toLocaleString()} messages`);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-sm">
+        <DialogHeader className="text-left">
+          <DialogTitle>Export conversation</DialogTitle>
+          <DialogDescription className="text-[13px]">
+            A plain-text transcript of your chat with {threadName} — ready to paste into ChatGPT,
+            Claude, or anywhere else.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="grid grid-cols-2 gap-2">
+          {RANGES.map((r, i) => (
+            <button
+              key={r.label}
+              onClick={() => setRangeIdx(i)}
+              className={cn(
+                "rounded-xl border px-3 py-2 text-[13.5px] font-medium transition-colors",
+                i === rangeIdx
+                  ? "border-[#0a84ff] bg-[#0a84ff]/10 text-[#0a84ff]"
+                  : "hover:bg-black/[0.03] dark:hover:bg-white/[0.05]"
+              )}
+            >
+              {r.label}
+            </button>
+          ))}
+        </div>
+        {error && <p className="text-[13px] text-red-500">{error}</p>}
+        <div className="flex gap-2">
+          <Button
+            onClick={doCopy}
+            disabled={busy !== null}
+            className="h-10 flex-1 rounded-xl bg-[#0a84ff] hover:bg-[#0974df]"
+          >
+            <Copy className="mr-1.5 size-4" />
+            {busy === "copy" ? "Copying…" : "Copy for AI"}
+          </Button>
+          <Button
+            onClick={doDownload}
+            disabled={busy !== null}
+            variant="outline"
+            className="h-10 flex-1 rounded-xl"
+          >
+            <FileDown className="mr-1.5 size-4" />
+            {busy === "download" ? "Exporting…" : "Download .txt"}
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }

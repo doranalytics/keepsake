@@ -230,6 +230,45 @@ export function getRecentText(threadId: string, maxChars = 12000): string {
   return lines.reverse().join("\n");
 }
 
+const EXPORT_CAP = 50000;
+
+export function exportThread(
+  threadId: string,
+  since?: number
+): { name: string; text: string; count: number } | null {
+  const thread = getThread(threadId);
+  if (!thread) return null;
+  let msgs: Message[];
+  if (isDemo) {
+    msgs = (demoMessages.get(threadId) ?? []).filter((m) => !since || m.date >= since);
+  } else {
+    const db = openIndex();
+    if (!db) return null;
+    msgs = (
+      db
+        .prepare(
+          `SELECT * FROM messages WHERE thread_id = ? AND date >= ?
+           ORDER BY date ASC, id ASC LIMIT ?`
+        )
+        .all(threadId, since ?? 0, EXPORT_CAP) as MsgRow[]
+    ).map(toMessage);
+  }
+  const lines = msgs.map((m) => {
+    const when = new Date(m.date).toLocaleString([], {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+    });
+    return `[${when}] ${m.isFromMe ? "Me" : m.sender || thread.name}: ${m.text}`;
+  });
+  const header = `Conversation with ${thread.name}${
+    thread.isGroup ? ` (${thread.participants.join(", ")})` : ""
+  }\n${msgs.length} messages · exported from Keepsake on ${new Date().toLocaleDateString()}\n\n`;
+  return { name: thread.name, text: header + lines.join("\n"), count: msgs.length };
+}
+
 export function search(q: string, threadId?: string): SearchResult[] {
   const query = q.trim();
   if (!query) return [];
