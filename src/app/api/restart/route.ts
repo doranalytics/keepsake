@@ -11,7 +11,10 @@ export async function POST() {
   if (isDemo) {
     return NextResponse.json({ error: "Only available when running locally." }, { status: 400 });
   }
-  const managed = process.env.SIDENOTE_MANAGED === "1";
+  // Managed = something relaunches us after exit: launchd for the installer
+  // path, the native shell for Sidenote.app.
+  const managed =
+    process.env.SIDENOTE_MANAGED === "1" || process.env.SIDENOTE_APP === "1";
   if (managed) {
     setTimeout(() => process.exit(0), 500);
   }

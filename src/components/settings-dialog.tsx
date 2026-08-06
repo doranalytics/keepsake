@@ -70,24 +70,42 @@ function UpdatesSection({
                 ))}
               </ul>
             ) : null}
-            <Button
-              size="sm"
-              onClick={onUpdate}
-              disabled={updating || !update.managed}
-              className="mt-2.5 h-8 rounded-lg bg-[#0a84ff] text-[12.5px] hover:bg-[#0974df]"
-            >
-              {updating ? (
-                <>
-                  <RefreshCw className="mr-1.5 size-3.5 animate-spin" />
-                  Updating — reloads when done…
-                </>
-              ) : (
-                <>
-                  <ArrowUpCircle className="mr-1.5 size-3.5" /> Update now
-                </>
-              )}
-            </Button>
-            {!update.managed && (
+            {update.app ? (
+              <Button
+                size="sm"
+                asChild
+                className="mt-2.5 h-8 rounded-lg bg-[#0a84ff] text-[12.5px] hover:bg-[#0974df]"
+              >
+                <a href="https://sidenote.lol">
+                  <ArrowUpCircle className="mr-1.5 size-3.5" /> Download the new version
+                </a>
+              </Button>
+            ) : (
+              <Button
+                size="sm"
+                onClick={onUpdate}
+                disabled={updating || !update.managed}
+                className="mt-2.5 h-8 rounded-lg bg-[#0a84ff] text-[12.5px] hover:bg-[#0974df]"
+              >
+                {updating ? (
+                  <>
+                    <RefreshCw className="mr-1.5 size-3.5 animate-spin" />
+                    Updating — reloads when done…
+                  </>
+                ) : (
+                  <>
+                    <ArrowUpCircle className="mr-1.5 size-3.5" /> Update now
+                  </>
+                )}
+              </Button>
+            )}
+            {update.app && (
+              <p className="mt-2 text-[12px] text-muted-foreground">
+                Grab the new Sidenote and drag it into Applications — it replaces
+                this one, and your messages, notes, and pins stay put.
+              </p>
+            )}
+            {!update.managed && !update.app && (
               <p className="mt-2 text-[12px] text-muted-foreground">
                 You&apos;re running Sidenote by hand — update in Terminal with{" "}
                 <code className="rounded bg-black/[0.06] px-1 py-0.5 text-[11.5px] dark:bg-white/10">
@@ -97,9 +115,11 @@ function UpdatesSection({
               </p>
             )}
           </div>
-          <p className="mt-2 text-[12px] text-muted-foreground">
-            Takes about a minute; Sidenote restarts and reloads on its own.
-          </p>
+          {!update.app && (
+            <p className="mt-2 text-[12px] text-muted-foreground">
+              Takes about a minute; Sidenote restarts and reloads on its own.
+            </p>
+          )}
         </>
       ) : (
         <div className="mt-2 flex items-center justify-between gap-2">

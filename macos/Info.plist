@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>CFBundleName</key><string>Sidenote</string>
+  <key>CFBundleDisplayName</key><string>Sidenote</string>
+  <key>CFBundleIdentifier</key><string>lol.sidenote.app</string>
+  <key>CFBundleExecutable</key><string>Sidenote</string>
+  <key>CFBundleIconFile</key><string>Sidenote.icns</string>
+  <key>CFBundlePackageType</key><string>APPL</string>
+  <key>CFBundleShortVersionString</key><string>__VERSION__</string>
+  <key>CFBundleVersion</key><string>__BUILD__</string>
+  <key>LSMinimumSystemVersion</key><string>13.0</string>
+  <key>LSApplicationCategoryType</key><string>public.app-category.productivity</string>
+  <key>NSHumanReadableCopyright</key><string>© 2026 Brian Doran</string>
+  <key>NSHighResolutionCapable</key><true/>
+  <key>NSSupportsAutomaticGraphicsSwitching</key><true/>
+  <key>SidenoteCommit</key><string>__COMMIT__</string>
+  <key>SidenoteCommitDate</key><string>__COMMIT_DATE__</string>
+  <key>NSAppTransportSecurity</key>
+  <dict>
+    <key>NSAllowsLocalNetworking</key><true/>
+  </dict>
+  <key>NSAppleEventsUsageDescription</key>
+  <string>Sidenote uses Messages to send your replies from your own iMessage account.</string>
+  <key>NSContactsUsageDescription</key>
+  <string>Sidenote reads your contacts locally to show names and photos on conversations.</string>
+</dict>
+</plist>

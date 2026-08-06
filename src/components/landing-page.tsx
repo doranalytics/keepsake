@@ -3,12 +3,12 @@
 /* eslint-disable @next/next/no-img-element */
 
 import { useEffect, useState } from "react";
-import { ArrowUpRight, Check, ChevronDown, Copy, Lock } from "lucide-react";
+import { ArrowUpRight, Check, Copy, Download, Lock } from "lucide-react";
 import { CHANGELOG } from "@/lib/changelog";
 import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
 
 const INSTALL_CMD = "curl -fsSL https://sidenote.lol/install.sh | bash";
+const DOWNLOAD_URL = "/Sidenote.zip";
 const APP_URL = "http://localhost:4747";
 
 // Probes the local install. A no-cors fetch resolves (opaque) if anything is
@@ -79,9 +79,12 @@ function AlreadyInstalled({ running }: { running: boolean | null }) {
             <span className="font-medium text-[#1d1d1f] dark:text-[#f5f5f7]">
               {APP_URL.replace("http://", "")}
             </span>
-            . If that page won&apos;t load (e.g. after a restart), paste the
-            install command into Terminal again — on an existing install it just
-            relaunches, in seconds:
+            . If that page won&apos;t load, open{" "}
+            <span className="font-medium text-[#1d1d1f] dark:text-[#f5f5f7]">
+              Sidenote
+            </span>{" "}
+            from your Applications folder. On a Terminal-based install, paste
+            the install command again — it just relaunches, in seconds:
           </p>
           <SmallCopy text={INSTALL_CMD} />
         </div>
@@ -115,14 +118,7 @@ function SmallCopy({ text }: { text: string }) {
 
 export function LandingPage({ onEnterDemo }: { onEnterDemo: () => void }) {
   const [showSetup, setShowSetup] = useState(false);
-  const [copied, setCopied] = useState(false);
   const running = useLocalApp();
-
-  const copy = () => {
-    navigator.clipboard.writeText(INSTALL_CMD);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1800);
-  };
 
   return (
     <div className="min-h-dvh overflow-y-auto bg-[#fbfbfd] text-[#1d1d1f] dark:bg-black dark:text-[#f5f5f7]">
@@ -164,13 +160,13 @@ export function LandingPage({ onEnterDemo }: { onEnterDemo: () => void }) {
 
         <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
           <Button
-            onClick={() => setShowSetup((s) => !s)}
+            asChild
             className="h-12 rounded-full bg-[#0a84ff] px-7 text-[15px] font-medium hover:bg-[#0974df]"
           >
-            Download Sidenote for Mac
-            <ChevronDown
-              className={cn("ml-1 size-4 transition-transform", showSetup && "rotate-180")}
-            />
+            <a href={DOWNLOAD_URL} download onClick={() => setShowSetup(true)}>
+              <Download className="mr-1.5 size-4" />
+              Download Sidenote for Mac
+            </a>
           </Button>
           <Button
             onClick={onEnterDemo}
@@ -191,30 +187,17 @@ export function LandingPage({ onEnterDemo }: { onEnterDemo: () => void }) {
         {showSetup && (
           <div className="mx-auto mt-10 max-w-2xl rounded-3xl border border-black/[0.08] bg-white p-7 text-left shadow-lg md:p-9 dark:border-white/10 dark:bg-[#141416]">
             <p className="text-[19px] font-semibold tracking-tight md:text-[21px]">
-              One command installs everything
+              You&apos;re three steps from your first search
             </p>
             <p className="mt-1 text-[13.5px] text-[#6e6e73] dark:text-[#a1a1a6]">
-              Click to copy, then paste into Terminal (⌘-space, type “terminal”) and press return.
+              Signed and notarized for macOS — no Terminal, no installer. Needs a Mac with Apple
+              silicon (any Mac from 2021 on).
             </p>
-            <button
-              onClick={copy}
-              className="group mt-4 flex w-full items-center justify-between gap-3 rounded-2xl bg-[#1d1d1f] px-5 py-4 text-left font-mono text-[13px] text-[#7ee787] shadow-inner transition-colors hover:bg-black md:text-[14px] dark:bg-black dark:ring-1 dark:ring-white/10"
-            >
-              <span className="min-w-0 truncate">{INSTALL_CMD}</span>
-              {copied ? (
-                <span className="flex shrink-0 items-center gap-1 font-sans text-[12px] font-medium text-white">
-                  <Check className="size-4" /> Copied
-                </span>
-              ) : (
-                <span className="flex shrink-0 items-center gap-1.5 font-sans text-[12px] font-medium text-white/50 group-hover:text-white">
-                  <Copy className="size-4" /> Copy
-                </span>
-              )}
-            </button>
             <ol className="mt-5 space-y-3">
               {[
-                <>This installs the real Sidenote app on your Mac — it lives in <code className="rounded bg-black/[0.06] px-1 dark:bg-white/10">~/Sidenote</code>, starts automatically when you log in, and opens in your browser at localhost:4747.</>,
-                <>Flip one macOS switch (Full Disk Access) so it can read your Messages. Sidenote walks you through it, buttons and all.</>,
+                <>Open the downloaded <span className="font-medium text-[#1d1d1f] dark:text-[#f5f5f7]">Sidenote.zip</span>, then drag <span className="font-medium text-[#1d1d1f] dark:text-[#f5f5f7]">Sidenote</span> into your Applications folder and open it.</>,
+                <>Click <span className="font-medium text-[#1d1d1f] dark:text-[#f5f5f7]">Sync your Messages</span> in the app.</>,
+                <>Flip one macOS switch (Full Disk Access) so Sidenote can read your Messages. The app walks you through it, buttons and all.</>,
               ].map((step, i) => (
                 <li
                   key={i}
@@ -248,6 +231,13 @@ export function LandingPage({ onEnterDemo }: { onEnterDemo: () => void }) {
                 Terminal (or let Sidenote do it for you in-app):
               </p>
               <SmallCopy text="ollama pull qwen3.6:27b" />
+            </div>
+            <div className="mt-6 border-t border-black/[0.06] pt-5 dark:border-white/10">
+              <p className="text-[13.5px] leading-relaxed text-[#6e6e73] dark:text-[#a1a1a6]">
+                On an Intel Mac, or just prefer the browser? One Terminal command installs the
+                browser version at localhost:4747:
+              </p>
+              <SmallCopy text={INSTALL_CMD} />
             </div>
           </div>
         )}

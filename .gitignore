@@ -19,6 +19,8 @@
 
 # production
 /build
+/macos/.build
+/public/Sidenote.zip
 
 # misc
 .DS_Store

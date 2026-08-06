@@ -18,14 +18,18 @@ async function check(fresh: boolean): Promise<UpdateInfo> {
   if (!fresh && cached && Date.now() - cached.at < 10 * 60_000) {
     return cached.body;
   }
-  let current: string | null = null;
-  let currentDate: string | null = null;
-  try {
-    const cwd = process.cwd();
-    current = (await run("git rev-parse HEAD", { cwd })).stdout.trim();
-    currentDate = (await run("git log -1 --format=%cs", { cwd })).stdout.trim();
-  } catch {
-    // not a git checkout — updates unavailable
+  // Inside Sidenote.app there is no git checkout; the shell passes the
+  // commit the bundle was built from through the environment.
+  let current: string | null = process.env.SIDENOTE_COMMIT ?? null;
+  let currentDate: string | null = process.env.SIDENOTE_COMMIT_DATE ?? null;
+  if (!current) {
+    try {
+      const cwd = process.cwd();
+      current = (await run("git rev-parse HEAD", { cwd })).stdout.trim();
+      currentDate = (await run("git log -1 --format=%cs", { cwd })).stdout.trim();
+    } catch {
+      // not a git checkout — updates unavailable
+    }
   }
   let latest: string | null = null;
   try {
@@ -56,6 +60,7 @@ async function check(fresh: boolean): Promise<UpdateInfo> {
     latest,
     updateAvailable: !!(current && latest && current !== latest),
     managed: process.env.SIDENOTE_MANAGED === "1",
+    app: process.env.SIDENOTE_APP === "1",
     news,
   };
   cached = { at: Date.now(), body };
@@ -77,6 +82,10 @@ export async function GET(req: NextRequest) {
 export async function POST() {
   if (isDemo) {
     return NextResponse.json({ error: "Only available when running locally." }, { status: 400 });
+  }
+  if (process.env.SIDENOTE_APP === "1") {
+    // The app updates by downloading a fresh build, not by git pull.
+    return NextResponse.json({ ok: false, managed: false, app: true });
   }
   if (process.env.SIDENOTE_MANAGED !== "1") {
     return NextResponse.json({ ok: false, managed: false });

@@ -9,7 +9,11 @@ import { Button } from "@/components/ui/button";
 // every needed action one click away and spell out the drag in between.
 export function FdaGuide({ engine }: { engine?: string | null }) {
   const [restarting, setRestarting] = useState<"waiting" | "manual" | null>(null);
-  const engineName = engine?.split("/").pop() ?? "Sidenote Engine";
+  // Inside Sidenote.app, macOS shows the app itself in the Full Disk Access
+  // list; the standalone installer path shows the bare engine binary.
+  const engineName = engine?.includes("Sidenote.app/")
+    ? "Sidenote"
+    : (engine?.split("/").pop() ?? "Sidenote Engine");
 
   const restart = async () => {
     // After the relaunch, the app re-syncs on its own — see SidenoteApp.

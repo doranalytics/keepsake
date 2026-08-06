@@ -51,5 +51,6 @@ export type UpdateInfo = {
   latest: string | null; // newest sha on GitHub main
   updateAvailable: boolean;
   managed: boolean; // running under the LaunchAgent (can self-update)
+  app: boolean; // running inside Sidenote.app (updates ship as a new download)
   news: { date: string; title: string; points: string[] }[];
 };
