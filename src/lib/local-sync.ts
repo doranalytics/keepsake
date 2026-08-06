@@ -129,11 +129,26 @@ function copyIntoRaw(src: string, destName: string): string {
   return dest;
 }
 
-let contactsCache: Map<string, string> | null = null;
+type Contacts = {
+  names: Map<string, string>; // phone-digits / email → display name
+  photos: Map<string, Buffer>; // display name → contact photo (jpeg/png)
+};
 
-// phone-digits / email → display name
-function loadContacts(): Map<string, string> {
+let contactsCache: Contacts | null = null;
+
+// AddressBook image blobs carry a 1-byte marker: 0x01 + image bytes, or a
+// short 0x02-prefixed reference we can't resolve. Only real images pass.
+function photoBuffer(blob: Buffer | null): Buffer | null {
+  if (!blob || blob.length < 64) return null;
+  const b = blob[0] === 0x01 || blob[0] === 0x02 ? blob.subarray(1) : blob;
+  const jpeg = b[0] === 0xff && b[1] === 0xd8;
+  const png = b[0] === 0x89 && b[1] === 0x50;
+  return jpeg || png ? Buffer.from(b) : null;
+}
+
+function loadContacts(): Contacts {
   const map = new Map<string, string>();
+  const photos = new Map<string, Buffer>();
   let dbFiles: string[] = [];
   try {
     const walk = (dir: string) => {
@@ -195,6 +210,26 @@ function loadContacts(): Map<string, string> {
           const n2 = name(r);
           if (n2 && r.val) map.set(r.val.toLowerCase(), n2);
         }
+        for (const row of db
+          .prepare(
+            `SELECT ZFIRSTNAME, ZLASTNAME, ZORGANIZATION,
+                    ZTHUMBNAILIMAGEDATA as thumb, ZIMAGEDATA as img
+             FROM ZABCDRECORD
+             WHERE ZTHUMBNAILIMAGEDATA IS NOT NULL OR ZIMAGEDATA IS NOT NULL`
+          )
+          .iterate() as IterableIterator<never>) {
+          const r = row as {
+            ZFIRSTNAME: string | null;
+            ZLASTNAME: string | null;
+            ZORGANIZATION: string | null;
+            thumb: Buffer | null;
+            img: Buffer | null;
+          };
+          const n2 = name(r);
+          if (!n2 || photos.has(n2)) continue;
+          const photo = photoBuffer(r.thumb) ?? photoBuffer(r.img);
+          if (photo) photos.set(n2, photo);
+        }
       } finally {
         db.close();
       }
@@ -202,7 +237,7 @@ function loadContacts(): Map<string, string> {
       // one unreadable source shouldn't kill the sync
     }
   });
-  return map;
+  return { names: map, photos };
 }
 
 export function resolveName(
@@ -286,7 +321,7 @@ export function runSync(): { threads: number; messages: number } {
     threadByChatRowid.set(c.rowid, id);
     if (!threads.has(id)) {
       const handles = participantsByChat.get(c.rowid) ?? [identifier];
-      const names = handles.map((h) => resolveName(h, contacts));
+      const names = handles.map((h) => resolveName(h, contacts.names));
       threads.set(id, {
         id,
         name: isGroup
@@ -311,13 +346,14 @@ export function runSync(): { threads: number; messages: number } {
     );
     CREATE TABLE messages(
       id INTEGER PRIMARY KEY, thread_id TEXT, sender TEXT,
-      is_from_me INT, date INT, text TEXT
+      is_from_me INT, date INT, text TEXT, date_read INT DEFAULT 0
     );
     CREATE INDEX idx_msg_thread ON messages(thread_id, date);
     CREATE TABLE attachments(
       id INTEGER PRIMARY KEY, message_id INT, path TEXT, mime TEXT, name TEXT
     );
     CREATE INDEX idx_att_msg ON attachments(message_id);
+    CREATE TABLE avatars(name TEXT PRIMARY KEY, data BLOB);
     CREATE VIRTUAL TABLE messages_fts USING fts5(text, content='messages', content_rowid='id');
   `);
 
@@ -325,13 +361,16 @@ export function runSync(): { threads: number; messages: number } {
     "INSERT INTO threads(id, name, participants, is_group) VALUES (?, ?, ?, ?)"
   );
   const insertMsg = out.prepare(
-    "INSERT OR IGNORE INTO messages(id, thread_id, sender, is_from_me, date, text) VALUES (?, ?, ?, ?, ?, ?)"
+    "INSERT OR IGNORE INTO messages(id, thread_id, sender, is_from_me, date, text, date_read) VALUES (?, ?, ?, ?, ?, ?, ?)"
   );
   const insertFts = out.prepare(
     "INSERT INTO messages_fts(rowid, text) VALUES (?, ?)"
   );
   const insertAtt = out.prepare(
     "INSERT OR IGNORE INTO attachments(id, message_id, path, mime, name) VALUES (?, ?, ?, ?, ?)"
+  );
+  const insertAvatar = out.prepare(
+    "INSERT OR REPLACE INTO avatars(name, data) VALUES (?, ?)"
   );
 
   // message rowid → displayable attachments (link-preview payloads excluded)
@@ -354,18 +393,20 @@ export function runSync(): { threads: number; messages: number } {
     for (const t of threads.values()) {
       insertThread.run(t.id, t.name, JSON.stringify(t.participants), t.isGroup ? 1 : 0);
     }
+    for (const [n, photo] of contacts.photos) insertAvatar.run(n, photo);
     type MsgRow = {
       id: number;
       text: string | null;
       attributedBody: Buffer | null;
       is_from_me: number;
       date: number;
+      date_read: number;
       handle: string | null;
       chat_id: number;
     };
     const stmt = src.prepare(
       `SELECT m.ROWID as id, m.text, m.attributedBody, m.is_from_me, m.date,
-              h.id as handle, cmj.chat_id as chat_id
+              m.date_read, h.id as handle, cmj.chat_id as chat_id
        FROM message m
        JOIN chat_message_join cmj ON cmj.message_id = m.ROWID
        LEFT JOIN handle h ON h.ROWID = m.handle_id
@@ -380,14 +421,15 @@ export function runSync(): { threads: number; messages: number } {
       const atts = attByMessage.get(row.id) ?? [];
       if (!text && atts.length === 0) continue; // reactions, edits, etc.
       const sender =
-        row.is_from_me || !row.handle ? "" : resolveName(row.handle, contacts);
+        row.is_from_me || !row.handle ? "" : resolveName(row.handle, contacts.names);
       insertMsg.run(
         row.id,
         threadId,
         sender,
         row.is_from_me ? 1 : 0,
         appleToUnixMs(row.date),
-        text ?? ""
+        text ?? "",
+        row.is_from_me ? appleToUnixMs(row.date_read) : 0
       );
       if (text) insertFts.run(row.id, text);
       for (const a of atts) {
@@ -475,13 +517,19 @@ export function runIncrementalSync(): number {
   const out = new Database(INDEX_DB);
   let added = 0;
   try {
-    // older indexes predate the attachments table
+    // older indexes predate the attachments/avatars tables and date_read
     out.exec(`
       CREATE TABLE IF NOT EXISTS attachments(
         id INTEGER PRIMARY KEY, message_id INT, path TEXT, mime TEXT, name TEXT
       );
       CREATE INDEX IF NOT EXISTS idx_att_msg ON attachments(message_id);
+      CREATE TABLE IF NOT EXISTS avatars(name TEXT PRIMARY KEY, data BLOB);
     `);
+    try {
+      out.exec("ALTER TABLE messages ADD COLUMN date_read INT DEFAULT 0");
+    } catch {
+      /* column already exists */
+    }
     const metaRow = out
       .prepare("SELECT value FROM meta WHERE key = 'maxMsgRowid'")
       .get() as { value: string } | undefined;
@@ -489,19 +537,37 @@ export function runIncrementalSync(): number {
       ? Number(metaRow.value)
       : ((out.prepare("SELECT COALESCE(MAX(id), 0) as m FROM messages").get() as { m: number }).m);
 
+    // Read receipts land as updates to rows we already copied — refresh the
+    // recent outgoing window so "Read" appears without a full sync.
+    try {
+      const updReceipt = out.prepare(
+        "UPDATE messages SET date_read = ? WHERE id = ? AND COALESCE(date_read, 0) = 0"
+      );
+      const receipts = src
+        .prepare(
+          `SELECT ROWID as id, date_read FROM message
+           WHERE is_from_me = 1 AND date_read > 0 AND ROWID > ?`
+        )
+        .all(Math.max(0, maxRowid - 400)) as { id: number; date_read: number }[];
+      for (const r of receipts) updReceipt.run(appleToUnixMs(r.date_read), r.id);
+    } catch {
+      /* receipts are decoration — never block the sync */
+    }
+
     type NewRow = {
       id: number;
       text: string | null;
       attributedBody: Buffer | null;
       is_from_me: number;
       date: number;
+      date_read: number;
       handle: string | null;
       chat_id: number;
     };
     const rows = src
       .prepare(
         `SELECT m.ROWID as id, m.text, m.attributedBody, m.is_from_me, m.date,
-                h.id as handle, cmj.chat_id as chat_id
+                m.date_read, h.id as handle, cmj.chat_id as chat_id
          FROM message m
          JOIN chat_message_join cmj ON cmj.message_id = m.ROWID
          LEFT JOIN handle h ON h.ROWID = m.handle_id
@@ -532,7 +598,7 @@ export function runIncrementalSync(): number {
       "INSERT OR IGNORE INTO threads(id, name, participants, is_group) VALUES (?, ?, ?, ?)"
     );
     const insertMsg = out.prepare(
-      "INSERT OR IGNORE INTO messages(id, thread_id, sender, is_from_me, date, text) VALUES (?, ?, ?, ?, ?, ?)"
+      "INSERT OR IGNORE INTO messages(id, thread_id, sender, is_from_me, date, text, date_read) VALUES (?, ?, ?, ?, ?, ?, ?)"
     );
     const insertFts = out.prepare("INSERT INTO messages_fts(rowid, text) VALUES (?, ?)");
     const insertAtt = out.prepare(
@@ -552,7 +618,7 @@ export function runIncrementalSync(): number {
         const threadId = isGroup ? `group:${chat.guid}` : `direct:${identifier}`;
         if (!threadExists.get(threadId)) {
           const handles = (partStmt.all(chat.rowid) as { handle: string }[]).map((h) => h.handle);
-          const names = (handles.length ? handles : [identifier]).map((h) => resolveName(h, contacts));
+          const names = (handles.length ? handles : [identifier]).map((h) => resolveName(h, contacts.names));
           insertThread.run(
             threadId,
             isGroup
@@ -568,10 +634,11 @@ export function runIncrementalSync(): number {
         insertMsg.run(
           row.id,
           threadId,
-          row.is_from_me || !row.handle ? "" : resolveName(row.handle, contacts),
+          row.is_from_me || !row.handle ? "" : resolveName(row.handle, contacts.names),
           row.is_from_me ? 1 : 0,
           appleToUnixMs(row.date),
-          text ?? ""
+          text ?? "",
+          row.is_from_me ? appleToUnixMs(row.date_read) : 0
         );
         if (text) insertFts.run(row.id, text);
         for (const a of atts) {

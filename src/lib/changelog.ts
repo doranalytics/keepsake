@@ -11,6 +11,16 @@ export type ChangelogEntry = {
 export const CHANGELOG: ChangelogEntry[] = [
   {
     date: "Aug 6, 2026",
+    title: "Contact photos and read receipts",
+    points: [
+      "Your contacts' real photos now appear on threads — in the list, chat headers, and search",
+      "Group chats show each sender's photo next to their messages",
+      "Sent messages show “Read” with the time once the other person has seen them",
+      "Photos come straight from your Mac's Contacts during sync — nothing to set up",
+    ],
+  },
+  {
+    date: "Aug 6, 2026",
     title: "Live threads, sending, and photos",
     points: [
       "New texts appear on their own, seconds after they arrive — no Sync button",

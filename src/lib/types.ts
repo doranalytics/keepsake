@@ -21,6 +21,7 @@ export type Message = {
   isFromMe: boolean;
   date: number; // unix ms
   text: string; // "" for attachment-only messages
+  dateRead?: number; // unix ms — when the recipient read it (outgoing only)
   attachments?: Attachment[];
 };
 

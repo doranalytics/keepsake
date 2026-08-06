@@ -53,6 +53,7 @@ type MsgRow = {
   is_from_me: number;
   date: number;
   text: string;
+  date_read?: number; // absent in pre-receipt indexes
 };
 
 const toThread = (r: ThreadRow): Thread => ({
@@ -71,6 +72,7 @@ const toMessage = (r: MsgRow): Message => ({
   isFromMe: !!r.is_from_me,
   date: r.date,
   text: r.text,
+  ...(r.date_read ? { dateRead: r.date_read } : {}),
 });
 
 // ---------- public API ----------
@@ -242,6 +244,22 @@ function attachMedia(db: Db, messages: Message[]): Message[] {
     // attachments table missing — re-sync will add it
   }
   return messages;
+}
+
+export function getAvatar(name: string): { data: Buffer; mime: string } | null {
+  if (isDemo) return null;
+  const db = openIndex();
+  if (!db) return null;
+  try {
+    const row = db.prepare("SELECT data FROM avatars WHERE name = ?").get(name) as
+      | { data: Buffer }
+      | undefined;
+    if (!row?.data) return null;
+    const mime = row.data[0] === 0x89 ? "image/png" : "image/jpeg";
+    return { data: row.data, mime };
+  } catch {
+    return null; // avatars table missing — re-sync will add it
+  }
 }
 
 export function getAttachment(

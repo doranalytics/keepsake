@@ -248,6 +248,15 @@ export function ThreadView({
     }
   };
 
+  // "Read" shows under your most recent sent message, iMessage-style
+  let lastMineId: number | null = null;
+  for (let i = messages.length - 1; i >= 0; i--) {
+    if (messages[i].isFromMe) {
+      lastMineId = messages[i].id;
+      break;
+    }
+  }
+
   return (
     <div className="relative flex h-full min-w-0 flex-1 flex-col bg-background">
       {/* header */}
@@ -385,9 +394,17 @@ export function ThreadView({
             )}
             {messages.map((m, i) => {
               const prev = messages[i - 1];
+              const next = messages[i + 1];
               const showSep = !prev || m.date - prev.date > GAP_FOR_SEPARATOR;
               const showSender =
                 thread?.isGroup && !m.isFromMe && (showSep || !prev || prev.sender !== m.sender);
+              // in group chats the sender's photo sits beside their last bubble in a run
+              const showAvatar =
+                thread?.isGroup &&
+                !m.isFromMe &&
+                (!next || next.isFromMe || next.sender !== m.sender);
+              const showRead =
+                m.id === lastMineId && !!m.dateRead && !hasLater && pending.length === 0;
               return (
                 <div key={m.id} data-mid={m.id}>
                   {showSep && (
@@ -396,9 +413,16 @@ export function ThreadView({
                     </p>
                   )}
                   {showSender && (
-                    <p className="mb-0.5 ml-3 text-[11px] text-muted-foreground">{m.sender}</p>
+                    <p className="mb-0.5 ml-9 text-[11px] text-muted-foreground">{m.sender}</p>
                   )}
                   <div className={cn("flex pb-0.5", m.isFromMe ? "justify-end" : "justify-start")}>
+                    {thread?.isGroup && !m.isFromMe && (
+                      <div className="mr-1.5 flex w-7 shrink-0 items-end">
+                        {showAvatar && (
+                          <AvatarBadge name={m.sender || "?"} className="size-7 text-[10px]" />
+                        )}
+                      </div>
+                    )}
                     <div
                       onContextMenu={(e) => {
                         e.preventDefault();
@@ -456,6 +480,11 @@ export function ThreadView({
                       {firstUrl(m.text) && <LinkPreview url={firstUrl(m.text)!} />}
                     </div>
                   </div>
+                  {showRead && (
+                    <p className="pt-0.5 pr-1 pb-1 text-right text-[11px] font-medium text-muted-foreground">
+                      Read {formatListDate(m.dateRead!)}
+                    </p>
+                  )}
                 </div>
               );
             })}

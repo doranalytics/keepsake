@@ -185,12 +185,19 @@ const priya: Line[] = [
   [7 * D - 100, "", "the slide 9 joke stays forever. thank you 🙏"],
 ];
 
+// A last sent message that's been seen gets a read receipt, like real life.
+function markRead<T extends { messages: Message[] }>(b: T, minutesAfter: number): T {
+  const last = b.messages[b.messages.length - 1];
+  if (last.isFromMe) last.dateRead = last.date + minutesAfter * MIN;
+  return b;
+}
+
 const built = [
-  build("demo-maya", "Maya Chen", ["Maya Chen"], false, maya, 1000),
+  markRead(build("demo-maya", "Maya Chen", ["Maya Chen"], false, maya, 1000), 3),
   build("demo-mom", "Mom", ["Mom"], false, mom, 2000),
   build("demo-hoops", "Sunday Hoops 🏀", ["Marcus Webb", "Jake Morrison", "Tony Russo"], true, hoops, 3000),
-  build("demo-jake", "Jake Morrison", ["Jake Morrison"], false, jake, 4000),
-  build("demo-sarah", "Sarah Doran", ["Sarah Doran"], false, sarah, 5000),
+  markRead(build("demo-jake", "Jake Morrison", ["Jake Morrison"], false, jake, 4000), 12),
+  markRead(build("demo-sarah", "Sarah Doran", ["Sarah Doran"], false, sarah, 5000), 25),
   build("demo-lake", "Lake House 2026", ["Marcus Webb", "Jake Morrison", "Priya Sharma"], true, lake, 6000),
   build("demo-dave", "Dave (Landlord)", ["Dave (Landlord)"], false, dave, 7000),
   build("demo-priya", "Priya Sharma", ["Priya Sharma"], false, priya, 8000),
