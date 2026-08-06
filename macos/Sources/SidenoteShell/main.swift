@@ -211,10 +211,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
             // id while this one is alive, so launching from inside our own
             // process quietly does nothing.
             log("relaunching from \(moved.path)")
-            let relaunched = spawnDetached(
-                "while /bin/kill -0 \(getpid()) 2>/dev/null; do /bin/sleep 0.1; done; "
-                    + "/usr/bin/open \"\(moved.path)\""
-            )
+            // `open` resolves through LaunchServices, which has not seen the
+            // bundle we just created — so register it, then keep trying until
+            // a process is actually running from the new location.
+            let lsregister = "/System/Library/Frameworks/CoreServices.framework"
+                + "/Frameworks/LaunchServices.framework/Support/lsregister"
+            let exe = moved.appendingPathComponent("Contents/MacOS/Sidenote").path
+            let relaunched = spawnDetached("""
+                while /bin/kill -0 \(getpid()) 2>/dev/null; do /bin/sleep 0.1; done
+                "\(lsregister)" -f "\(moved.path)" 2>/dev/null
+                for i in 1 2 3 4 5 6 7 8 9 10; do
+                  /usr/bin/open "\(moved.path)" 2>/dev/null
+                  /bin/sleep 1
+                  if /usr/bin/pgrep -f "\(exe)" >/dev/null 2>&1; then exit 0; fi
+                done
+                /usr/bin/open -R "\(moved.path)"
+                """)
             if !relaunched {
                 // Leave the user somewhere useful rather than with a vanished app.
                 NSWorkspace.shared.activateFileViewerSelecting([moved])
