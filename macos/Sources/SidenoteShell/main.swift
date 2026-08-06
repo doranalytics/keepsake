@@ -158,14 +158,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
 
         do {
             let moved = try moveToApplications()
-            let config = NSWorkspace.OpenConfiguration()
-            config.createsNewApplicationInstance = true
-            NSWorkspace.shared.openApplication(at: moved, configuration: config) { _, error in
-                if let error {
-                    log("relaunch failed: \(error.localizedDescription)")
-                }
-                DispatchQueue.main.async { NSApp.terminate(nil) }
-            }
+            // Hand the relaunch to a detached `open` that fires once we're
+            // gone: LaunchServices won't start a second instance of the same
+            // bundle id while this one is still alive, so asking it to launch
+            // from inside our own process quietly does nothing.
+            let relaunch = Process()
+            relaunch.executableURL = URL(fileURLWithPath: "/bin/sh")
+            relaunch.arguments = ["-c", "sleep 1; open \"\(moved.path)\""]
+            try relaunch.run()
+            log("relaunching from \(moved.path)")
+            NSApp.terminate(nil)
             return true
         } catch {
             let failed = NSAlert()
@@ -202,8 +204,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         // keeps the Applications install at a stable path forever.
         _ = shell("/usr/bin/xattr", ["-dr", "com.apple.quarantine", dest.path])
 
-        // Tidy up the download the user opened, when we can see it.
-        if source != Bundle.main.bundleURL || !isTranslocated {
+        // Tidy up the copy the user opened — but never while translocated, as
+        // the read-only mirror we're executing from is backed by that file.
+        if !isTranslocated {
             _ = try? fm.trashItem(at: source, resultingItemURL: nil)
         }
         log("moved to \(dest.path)")
