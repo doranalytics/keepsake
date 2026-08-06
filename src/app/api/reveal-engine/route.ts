@@ -14,8 +14,7 @@ export async function POST() {
   // Inside Sidenote.app, macOS attributes disk access to the app bundle, so
   // that's what belongs in the Full Disk Access list — reveal it instead of
   // the engine binary buried inside it.
-  const appMatch = process.execPath.match(/^(.*?\.app)\//);
-  const target = process.env.SIDENOTE_APP === "1" && appMatch ? appMatch[1] : process.execPath;
+  const target = process.env.SIDENOTE_APP_PATH ?? process.execPath;
   exec(`open -R "${target}"`);
   return NextResponse.json({ ok: true, engine: target });
 }

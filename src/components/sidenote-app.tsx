@@ -167,6 +167,7 @@ export function SidenoteApp() {
         error={syncError}
         permission={syncPermission}
         engine={status?.engine}
+        translocated={status?.translocated}
         onSync={sync}
       />
     );
@@ -331,7 +332,7 @@ export function SidenoteApp() {
               Steps to let Sidenote read your Messages.
             </DialogDescription>
           </DialogHeader>
-          <FdaGuide engine={status?.engine} />
+          <FdaGuide engine={status?.engine} translocated={status?.translocated} />
         </DialogContent>
       </Dialog>
     </div>
@@ -343,12 +344,14 @@ function SetupScreen({
   error,
   permission,
   engine,
+  translocated,
   onSync,
 }: {
   syncing: boolean;
   error: string | null;
   permission: boolean;
   engine?: string;
+  translocated?: boolean;
   onSync: () => void;
 }) {
   return (
@@ -392,7 +395,7 @@ function SetupScreen({
         )}
         {permission ? (
           <div className="mt-4">
-            <FdaGuide engine={engine} />
+            <FdaGuide engine={engine} translocated={translocated} />
           </div>
         ) : (
           <p className="mt-4 text-[12px] leading-relaxed text-muted-foreground">

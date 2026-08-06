@@ -42,7 +42,8 @@ export type AppStatus = {
     model: string | null;
     models: { name: string; size: number }[];
   };
-  engine?: string; // path of the node binary that needs Full Disk Access (local mode)
+  engine?: string; // what macOS lists under Full Disk Access: the app bundle, or the node binary
+  translocated?: boolean; // running from a temporary copy, where an FDA grant can't persist
 };
 
 export type UpdateInfo = {

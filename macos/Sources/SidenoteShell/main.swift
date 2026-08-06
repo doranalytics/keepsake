@@ -45,6 +45,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         buildMenu()
+        // Runs before the server boots, so relaunching from the new location
+        // can never collide with our own port.
+        if relocateIfNeeded() { return }
         buildWindow()
         DispatchQueue.global(qos: .userInitiated).async { self.bootServer() }
     }
@@ -73,6 +76,138 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
             let deadline = Date().addingTimeInterval(2)
             while s.isRunning && Date() < deadline { usleep(50_000) }
         }
+    }
+
+    // MARK: - Where the app lives
+
+    // Opened straight from the download, macOS runs the app from a random,
+    // read-only AppTranslocation path. Full Disk Access is granted per path,
+    // so a grant made there is worthless the moment the app relaunches — the
+    // permission simply never sticks. Getting into /Applications first is the
+    // difference between the FDA flow working and quietly failing forever.
+    typealias IsTranslocatedFn = @convention(c) (
+        CFURL, UnsafeMutablePointer<DarwinBoolean>, UnsafeMutablePointer<Unmanaged<CFError>?>?
+    ) -> Bool
+    typealias OriginalPathFn = @convention(c) (
+        CFURL, UnsafeMutablePointer<Unmanaged<CFError>?>?
+    ) -> Unmanaged<CFURL>?
+
+    static let securityHandle = dlopen("/System/Library/Frameworks/Security.framework/Security", RTLD_LAZY)
+
+    var isTranslocated: Bool {
+        guard let sym = dlsym(Self.securityHandle, "SecTranslocateIsTranslocatedURL") else {
+            return Bundle.main.bundleURL.path.contains("/AppTranslocation/")
+        }
+        let fn = unsafeBitCast(sym, to: IsTranslocatedFn.self)
+        var flag: DarwinBoolean = false
+        guard fn(Bundle.main.bundleURL as CFURL, &flag, nil) else {
+            return Bundle.main.bundleURL.path.contains("/AppTranslocation/")
+        }
+        return flag.boolValue
+    }
+
+    // The real on-disk location, seeing through translocation.
+    var trueBundleURL: URL {
+        guard isTranslocated, let sym = dlsym(Self.securityHandle, "SecTranslocateCreateOriginalPathForURL") else {
+            return Bundle.main.bundleURL
+        }
+        let fn = unsafeBitCast(sym, to: OriginalPathFn.self)
+        guard let out = fn(Bundle.main.bundleURL as CFURL, nil) else { return Bundle.main.bundleURL }
+        return out.takeRetainedValue() as URL
+    }
+
+    var applicationsDirs: [String] {
+        ["/Applications", NSHomeDirectory() + "/Applications"]
+    }
+
+    var livesInApplications: Bool {
+        let path = trueBundleURL.deletingLastPathComponent().path
+        return applicationsDirs.contains(path)
+    }
+
+    /// Returns true when the app is relaunching from a new location and this
+    /// instance should stand down.
+    func relocateIfNeeded() -> Bool {
+        let translocated = isTranslocated
+        if !translocated && livesInApplications { return false }
+
+        let alert = NSAlert()
+        alert.alertStyle = .informational
+        alert.icon = NSApp.applicationIconImage
+        if translocated {
+            alert.messageText = "Move Sidenote to your Applications folder"
+            alert.informativeText = """
+                macOS is running Sidenote from a temporary read-only copy because it was opened \
+                straight from the download. Full Disk Access can't stick to a temporary copy, so \
+                Sidenote wouldn't be able to read your Messages.
+
+                Moving it to Applications takes a second and fixes this for good.
+                """
+        } else {
+            alert.messageText = "Keep Sidenote in your Applications folder?"
+            alert.informativeText = """
+                Sidenote is running from \(trueBundleURL.deletingLastPathComponent().path). \
+                Full Disk Access is granted per location, so if you move Sidenote later you'd \
+                have to grant it again. Applications is the safe home.
+                """
+        }
+        alert.addButton(withTitle: "Move to Applications")
+        alert.addButton(withTitle: translocated ? "Open Anyway" : "Not Now")
+        NSApp.activate(ignoringOtherApps: true)
+        guard alert.runModal() == .alertFirstButtonReturn else { return false }
+
+        do {
+            let moved = try moveToApplications()
+            let config = NSWorkspace.OpenConfiguration()
+            config.createsNewApplicationInstance = true
+            NSWorkspace.shared.openApplication(at: moved, configuration: config) { _, error in
+                if let error {
+                    log("relaunch failed: \(error.localizedDescription)")
+                }
+                DispatchQueue.main.async { NSApp.terminate(nil) }
+            }
+            return true
+        } catch {
+            let failed = NSAlert()
+            failed.alertStyle = .warning
+            failed.messageText = "Couldn't move Sidenote"
+            failed.informativeText = """
+                \(error.localizedDescription)
+
+                Drag Sidenote into your Applications folder yourself, then open it from there.
+                """
+            failed.addButton(withTitle: "Open Anyway")
+            failed.runModal()
+            return false
+        }
+    }
+
+    func moveToApplications() throws -> URL {
+        let fm = FileManager.default
+        let source = trueBundleURL
+        let dir = fm.isWritableFile(atPath: "/Applications")
+            ? "/Applications"
+            : NSHomeDirectory() + "/Applications"
+        try fm.createDirectory(atPath: dir, withIntermediateDirectories: true)
+        let dest = URL(fileURLWithPath: dir).appendingPathComponent("Sidenote.app")
+
+        if fm.fileExists(atPath: dest.path) {
+            // Replacing an older install: trash it rather than deleting outright.
+            _ = try? fm.trashItem(at: dest, resultingItemURL: nil)
+            try? fm.removeItem(at: dest)
+        }
+        try fm.copyItem(at: source, to: dest)
+
+        // Quarantine is what triggers translocation; clearing it on the copy
+        // keeps the Applications install at a stable path forever.
+        _ = shell("/usr/bin/xattr", ["-dr", "com.apple.quarantine", dest.path])
+
+        // Tidy up the download the user opened, when we can see it.
+        if source != Bundle.main.bundleURL || !isTranslocated {
+            _ = try? fm.trashItem(at: source, resultingItemURL: nil)
+        }
+        log("moved to \(dest.path)")
+        return dest
     }
 
     // MARK: - Window
@@ -226,6 +361,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         env["HOSTNAME"] = "127.0.0.1"
         env["NODE_ENV"] = "production"
         env["SIDENOTE_APP"] = "1"
+        // The bundle is what macOS lists under Full Disk Access — the UI needs
+        // its real path, not the node binary buried inside it.
+        env["SIDENOTE_APP_PATH"] = trueBundleURL.path
+        if isTranslocated { env["SIDENOTE_TRANSLOCATED"] = "1" }
         if let commit = Bundle.main.infoDictionary?["SidenoteCommit"] as? String {
             env["SIDENOTE_COMMIT"] = commit
         }

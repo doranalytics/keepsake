@@ -11,6 +11,16 @@ export type ChangelogEntry = {
 export const CHANGELOG: ChangelogEntry[] = [
   {
     date: "Aug 6, 2026",
+    title: "Full Disk Access setup that actually works",
+    points: [
+      "Sidenote offers to move itself into Applications on first open — one click",
+      "Opened straight from the download, macOS runs apps from a temporary copy where the permission can never stick; Sidenote now spots that and says so",
+      "The setup steps point at Sidenote itself in the permission list, not the engine file inside it",
+      "Fixed the setup panel spilling outside its window",
+    ],
+  },
+  {
+    date: "Aug 6, 2026",
     title: "Sidenote is now a real Mac app",
     points: [
       "Download it from sidenote.lol, drag it into Applications, done — no Terminal, no installer command",
