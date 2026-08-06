@@ -12,11 +12,32 @@ let BASE_URL = URL(string: "http://127.0.0.1:\(PORT)/")!
 func log(_ msg: String) {
     let line = "[shell] \(msg)\n"
     FileHandle.standardError.write(line.data(using: .utf8)!)
-    if let h = try? FileHandle(forWritingTo: AppDelegate.logURL) {
-        h.seekToEndOfFile()
-        h.write(line.data(using: .utf8)!)
-        try? h.close()
+    // O_APPEND, because the server holds its own handle on this file — a
+    // handle with an independent offset would overwrite whatever it wrote.
+    let fd = Darwin.open(AppDelegate.logURL.path, O_WRONLY | O_APPEND | O_CREAT, 0o644)
+    guard fd >= 0 else { return }
+    _ = line.withCString { write(fd, $0, strlen($0)) }
+    close(fd)
+}
+
+/// Runs a shell command in its own session so it outlives this process.
+/// LaunchServices tears our process group down the moment the app quits,
+/// which kills an ordinary child mid-relaunch.
+@discardableResult
+func spawnDetached(_ command: String) -> Bool {
+    var attr: posix_spawnattr_t?
+    posix_spawnattr_init(&attr)
+    defer { posix_spawnattr_destroy(&attr) }
+    posix_spawnattr_setflags(&attr, Int16(POSIX_SPAWN_SETSID))
+    var argv: [UnsafeMutablePointer<CChar>?] = ["/bin/sh", "-c", command].map {
+        $0.withCString { strdup($0) }
     }
+    argv.append(nil)
+    defer { argv.forEach { free($0) } }
+    var pid: pid_t = 0
+    let rc = posix_spawn(&pid, "/bin/sh", nil, &attr, &argv, environ)
+    log("detached spawn rc=\(rc) pid=\(pid)")
+    return rc == 0
 }
 
 final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDelegate, WKDownloadDelegate {
@@ -45,9 +66,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         buildMenu()
-        // Runs before the server boots, so relaunching from the new location
-        // can never collide with our own port.
-        if relocateIfNeeded() { return }
+        // Deciding where to live happens before the server boots, so
+        // relaunching from the new location can never collide with our port.
+        // The prompt is deferred a turn: a modal run inside
+        // applicationDidFinishLaunching can return its default answer without
+        // ever appearing on screen, which would move the app with no consent.
+        if needsRelocation {
+            DispatchQueue.main.async { self.promptRelocate() }
+            return
+        }
+        start()
+    }
+
+    func start() {
         buildWindow()
         DispatchQueue.global(qos: .userInitiated).async { self.bootServer() }
     }
@@ -125,12 +156,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         return applicationsDirs.contains(path)
     }
 
-    /// Returns true when the app is relaunching from a new location and this
-    /// instance should stand down.
-    func relocateIfNeeded() -> Bool {
-        let translocated = isTranslocated
-        if !translocated && livesInApplications { return false }
+    var needsRelocation: Bool { isTranslocated || !livesInApplications }
 
+    /// Asks whether to move into /Applications, then either relocates and
+    /// relaunches from there, or carries on from where the app sits today.
+    func promptRelocate() {
+        let translocated = isTranslocated
         let alert = NSAlert()
         alert.alertStyle = .informational
         alert.icon = NSApp.applicationIconImage
@@ -154,21 +185,41 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         alert.addButton(withTitle: "Move to Applications")
         alert.addButton(withTitle: translocated ? "Open Anyway" : "Not Now")
         NSApp.activate(ignoringOtherApps: true)
-        guard alert.runModal() == .alertFirstButtonReturn else { return false }
+
+        let asked = Date()
+        let answer = alert.runModal()
+        // Moving the app is the user's call, so treat a suspiciously instant
+        // answer as "the panel never appeared" rather than as consent — a
+        // modal that fails to present returns its default button immediately,
+        // and nobody reads and answers this in a tenth of a second.
+        let elapsed = Date().timeIntervalSince(asked)
+        guard elapsed > 0.15 else {
+            log("relocation panel did not present (\(Int(elapsed * 1000))ms) — leaving app in place")
+            start()
+            return
+        }
+        guard answer == .alertFirstButtonReturn else {
+            log("user declined the move")
+            start()
+            return
+        }
 
         do {
             let moved = try moveToApplications()
-            // Hand the relaunch to a detached `open` that fires once we're
-            // gone: LaunchServices won't start a second instance of the same
-            // bundle id while this one is still alive, so asking it to launch
-            // from inside our own process quietly does nothing.
-            let relaunch = Process()
-            relaunch.executableURL = URL(fileURLWithPath: "/bin/sh")
-            relaunch.arguments = ["-c", "sleep 1; open \"\(moved.path)\""]
-            try relaunch.run()
+            // Hand the relaunch to a detached `open` that waits for us to go:
+            // LaunchServices won't start a second instance of the same bundle
+            // id while this one is alive, so launching from inside our own
+            // process quietly does nothing.
             log("relaunching from \(moved.path)")
+            let relaunched = spawnDetached(
+                "while /bin/kill -0 \(getpid()) 2>/dev/null; do /bin/sleep 0.1; done; "
+                    + "/usr/bin/open \"\(moved.path)\""
+            )
+            if !relaunched {
+                // Leave the user somewhere useful rather than with a vanished app.
+                NSWorkspace.shared.activateFileViewerSelecting([moved])
+            }
             NSApp.terminate(nil)
-            return true
         } catch {
             let failed = NSAlert()
             failed.alertStyle = .warning
@@ -180,7 +231,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
                 """
             failed.addButton(withTitle: "Open Anyway")
             failed.runModal()
-            return false
+            start()
         }
     }
 
@@ -375,8 +426,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
             env["SIDENOTE_COMMIT_DATE"] = date
         }
         p.environment = env
-        if let h = try? FileHandle(forWritingTo: Self.logURL) {
-            h.seekToEndOfFile()
+        let fd = Darwin.open(Self.logURL.path, O_WRONLY | O_APPEND | O_CREAT, 0o644)
+        if fd >= 0 {
+            let h = FileHandle(fileDescriptor: fd, closeOnDealloc: true)
             p.standardOutput = h
             p.standardError = h
         }
