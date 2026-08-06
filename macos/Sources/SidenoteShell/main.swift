@@ -66,16 +66,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         buildMenu()
-        // Deciding where to live happens before the server boots, so
-        // relaunching from the new location can never collide with our port.
-        // The prompt is deferred a turn: a modal run inside
-        // applicationDidFinishLaunching can return its default answer without
-        // ever appearing on screen, which would move the app with no consent.
-        if needsRelocation {
-            DispatchQueue.main.async { self.promptRelocate() }
-            return
-        }
+        // The app always comes up first. Asking about relocation with a bare
+        // modal at launch proved unreliable — from a translocated copy it can
+        // fail to present and either answer itself or hang with no window at
+        // all. A sheet on a real window can only be answered by a real click,
+        // and if it never appears the app is still running and the in-app
+        // guide explains the situation.
         start()
+        if needsRelocation {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { self.promptRelocate() }
+        }
     }
 
     func start() {
@@ -185,25 +185,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         alert.addButton(withTitle: "Move to Applications")
         alert.addButton(withTitle: translocated ? "Open Anyway" : "Not Now")
         NSApp.activate(ignoringOtherApps: true)
-
-        let asked = Date()
-        let answer = alert.runModal()
-        // Moving the app is the user's call, so treat a suspiciously instant
-        // answer as "the panel never appeared" rather than as consent — a
-        // modal that fails to present returns its default button immediately,
-        // and nobody reads and answers this in a tenth of a second.
-        let elapsed = Date().timeIntervalSince(asked)
-        guard elapsed > 0.15 else {
-            log("relocation panel did not present (\(Int(elapsed * 1000))ms) — leaving app in place")
-            start()
-            return
+        alert.beginSheetModal(for: window) { [weak self] answer in
+            guard let self else { return }
+            guard answer == .alertFirstButtonReturn else {
+                log("user declined the move")
+                return
+            }
+            self.performMove()
         }
-        guard answer == .alertFirstButtonReturn else {
-            log("user declined the move")
-            start()
-            return
-        }
+    }
 
+    func performMove() {
         do {
             let moved = try moveToApplications()
             // Hand the relaunch to a detached `open` that waits for us to go:
@@ -233,6 +225,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
             }
             NSApp.terminate(nil)
         } catch {
+            // The app is already running from where it sits, so this is a
+            // note, not a dead end.
+            log("move failed: \(error.localizedDescription)")
             let failed = NSAlert()
             failed.alertStyle = .warning
             failed.messageText = "Couldn't move Sidenote"
@@ -241,9 +236,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
 
                 Drag Sidenote into your Applications folder yourself, then open it from there.
                 """
-            failed.addButton(withTitle: "Open Anyway")
-            failed.runModal()
-            start()
+            failed.addButton(withTitle: "OK")
+            failed.beginSheetModal(for: window)
         }
     }
 
