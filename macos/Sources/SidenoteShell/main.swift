@@ -56,8 +56,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         return true
     }
 
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        // Flag before anything else so the termination handler can't win the
+        // race and respawn an orphaned server.
+        quitting = true
+        server?.terminationHandler = nil
+        return .terminateNow
+    }
+
     func applicationWillTerminate(_ notification: Notification) {
         quitting = true
+        server?.terminationHandler = nil
         server?.terminate()
         // Give node a moment to exit cleanly.
         if let s = server, s.isRunning {

@@ -1,0 +1,8 @@
+node_modules
+.next
+build
+macos/.build
+Sidenote Engine
+sidenote.log
+verify
+.git
