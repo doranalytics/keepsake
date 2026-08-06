@@ -36,11 +36,17 @@ chmod +x "$APP/Contents/Helpers/Sidenote Engine"
 
 SERVER="$APP/Contents/Resources/server"
 cp -R .next/standalone/. "$SERVER/"
+# File tracing over-includes project files (routes touch process.cwd()); the
+# server only needs server.js, .next, node_modules, package.json, and public.
+rm -rf "$SERVER/build" "$SERVER/verify" "$SERVER/src" "$SERVER/scripts" \
+       "$SERVER/macos" "$SERVER/public" "$SERVER/Sidenote Engine" \
+       "$SERVER/sidenote.log" "$SERVER/package-lock.json" \
+       "$SERVER/tsconfig.tsbuildinfo" "$SERVER/.git"
 mkdir -p "$SERVER/.next"
+rm -rf "$SERVER/.next/static"
 cp -R .next/static "$SERVER/.next/static"
 cp -R public "$SERVER/public"
 rm -f "$SERVER/public/Sidenote.zip"   # never nest the download inside itself
-rm -f "$SERVER/sidenote.log"
 
 sed -e "s/__VERSION__/$VERSION/" -e "s/__BUILD__/$BUILD_NUM/" \
     -e "s/__COMMIT__/$COMMIT/" -e "s/__COMMIT_DATE__/$COMMIT_DATE/" \
@@ -61,8 +67,9 @@ cp "$SRC_ICON" "$ICONSET/icon_512x512@2x.png"
 iconutil -c icns "$ICONSET" -o "$APP/Contents/Resources/Sidenote.icns"
 
 step "Signing (inside-out, hardened runtime)…"
-# Native node modules first, then the engine (with JIT entitlements), then the bundle.
-find "$SERVER" -name "*.node" -print0 | while IFS= read -r -d '' f; do
+# Native node modules and dylibs first, then the engine (with JIT
+# entitlements), then the bundle.
+find "$SERVER" -type f \( -name "*.node" -o -name "*.dylib" \) -print0 | while IFS= read -r -d '' f; do
   codesign --force --options runtime --timestamp --sign "$IDENTITY" "$f"
 done
 codesign --force --options runtime --timestamp \
