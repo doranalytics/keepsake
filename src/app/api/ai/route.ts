@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getRecentText, getThread, isDemo, retrieveRelevantText } from "@/lib/store";
-import { detectOllama, streamChat } from "@/lib/ollama";
+import { detectOllama, streamChat, type ChatTurn } from "@/lib/ollama";
+import { appendExchange, getConversationMessages } from "@/lib/vault";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
@@ -20,6 +21,7 @@ export async function POST(req: NextRequest) {
     mode: "summarize" | "ask";
     question?: string;
     model?: string;
+    conversationId?: string;
   };
   const thread = getThread(body.threadId);
   if (!thread) {
@@ -51,8 +53,41 @@ export async function POST(req: NextRequest) {
             : ""
         }Here are the recent messages:\n\n${context}\n\nQuestion: ${body.question ?? ""}\n\nAnswer based only on the messages above. If the answer isn't in them, say so.`;
 
+  // Earlier turns in this AI conversation, so follow-ups like "what about
+  // the second one?" resolve. Only the chat itself is replayed — the message
+  // context is rebuilt fresh above and would be wasteful to repeat per turn.
+  const history: ChatTurn[] = body.conversationId
+    ? getConversationMessages(body.conversationId).map((m) => ({
+        role: m.role === "user" ? ("user" as const) : ("assistant" as const),
+        content: m.text,
+      }))
+    : [];
+
+  const prompt =
+    body.mode === "summarize"
+      ? `Summarize my conversation with ${thread.name}`
+      : (body.question ?? "");
+
   try {
-    const stream = await streamChat(model, system, user);
+    const stream = await streamChat(
+      model,
+      [
+        { role: "system", content: system },
+        ...history,
+        { role: "user", content: user },
+      ],
+      (answer) => {
+        // Written server-side, after the tokens are out. The answer lands in
+        // the vault even if the window is closed mid-stream.
+        if (body.conversationId && answer.trim()) {
+          try {
+            appendExchange(body.conversationId, prompt, answer);
+          } catch {
+            // never let a persistence hiccup kill an answer already delivered
+          }
+        }
+      }
+    );
     return new Response(stream, {
       headers: { "Content-Type": "text/plain; charset=utf-8" },
     });

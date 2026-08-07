@@ -33,11 +33,17 @@ export async function detectOllama(): Promise<OllamaInfo> {
   }
 }
 
+export type ChatTurn = { role: "system" | "user" | "assistant"; content: string };
+
 // Streams plain text tokens from Ollama's NDJSON chat stream.
+//
+// `onDone` receives the full answer once the stream finishes, so the caller can
+// persist it. It fires on cancel too — a half-written answer is still worth
+// keeping, and the user pressing Stop shouldn't throw the reply away.
 export async function streamChat(
   model: string,
-  system: string,
-  user: string
+  messages: ChatTurn[],
+  onDone?: (answer: string) => void
 ): Promise<ReadableStream<Uint8Array>> {
   const res = await fetch(`${OLLAMA}/api/chat`, {
     method: "POST",
@@ -48,10 +54,7 @@ export async function streamChat(
       think: false,
       keep_alive: "30m", // keep the model warm in RAM between questions
       options: { temperature: 0.3 },
-      messages: [
-        { role: "system", content: system },
-        { role: "user", content: user },
-      ],
+      messages,
     }),
   });
   if (!res.ok || !res.body) {
@@ -61,10 +64,18 @@ export async function streamChat(
   const decoder = new TextDecoder();
   const encoder = new TextEncoder();
   let buffer = "";
+  let answer = "";
+  let finished = false;
+  const finish = () => {
+    if (finished) return;
+    finished = true;
+    onDone?.(answer);
+  };
   return new ReadableStream<Uint8Array>({
     async pull(controller) {
       const { done, value } = await reader.read();
       if (done) {
+        finish();
         controller.close();
         return;
       }
@@ -78,13 +89,17 @@ export async function streamChat(
             message?: { content?: string };
           };
           const content = chunk.message?.content;
-          if (content) controller.enqueue(encoder.encode(content));
+          if (content) {
+            answer += content;
+            controller.enqueue(encoder.encode(content));
+          }
         } catch {
           // partial line noise — ignore
         }
       }
     },
     cancel() {
+      finish();
       reader.cancel();
     },
   });

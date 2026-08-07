@@ -1,51 +1,115 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { BookmarkPlus, X } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import {
-  getSavedMessages,
-  notesKey,
+  loadNote,
+  loadSavedMessages,
   removeSavedMessage,
+  saveNote,
   type SavedMessage,
 } from "@/lib/notes";
 import { formatListDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
+type SaveState = "saved" | "saving" | "error";
+
 export function NotesPanel({
   threadId,
   threadName,
+  demo,
   onJump,
 }: {
   threadId: string;
   threadName: string;
+  demo: boolean;
   onJump: (messageId: number) => void;
 }) {
-  const key = notesKey(threadId);
   const [value, setValue] = useState("");
-  const [saved, setSaved] = useState(true);
+  const [ready, setReady] = useState(false);
+  const [state, setState] = useState<SaveState>("saved");
   const [pinned, setPinned] = useState<SavedMessage[]>([]);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // What the debounce still owes the disk, so unmount can flush it.
+  const pending = useRef<{ threadId: string; body: string } | null>(null);
+
+  const flush = useCallback(async () => {
+    const owed = pending.current;
+    if (!owed) return;
+    pending.current = null;
+    if (timer.current) {
+      clearTimeout(timer.current);
+      timer.current = null;
+    }
+    try {
+      await saveNote(owed.threadId, owed.body, demo);
+      setState("saved");
+    } catch {
+      pending.current = owed;
+      setState("error");
+    }
+  }, [demo]);
 
   useEffect(() => {
-    setValue(localStorage.getItem(key) ?? "");
-    setSaved(true);
-    setPinned(getSavedMessages(threadId));
-  }, [key, threadId]);
+    let cancelled = false;
+    setReady(false);
+    setState("saved");
+    (async () => {
+      try {
+        const [body, saved] = await Promise.all([
+          loadNote(threadId, demo),
+          loadSavedMessages(threadId, demo),
+        ]);
+        if (cancelled) return;
+        setValue(body);
+        setPinned(saved);
+      } catch {
+        if (!cancelled) setState("error");
+      } finally {
+        if (!cancelled) setReady(true);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [threadId, demo]);
+
+  // Closing the sheet, switching threads, or quitting the app must not eat
+  // the last few hundred milliseconds of typing.
+  useEffect(() => {
+    const onHide = () => {
+      const owed = pending.current;
+      if (!owed || demo) return;
+      // Fire-and-forget: the page may be going away before a fetch resolves.
+      navigator.sendBeacon?.(
+        "/api/notes",
+        new Blob([JSON.stringify(owed)], { type: "application/json" })
+      );
+    };
+    window.addEventListener("pagehide", onHide);
+    return () => {
+      window.removeEventListener("pagehide", onHide);
+      void flush();
+    };
+  }, [flush, demo]);
 
   const onChange = (v: string) => {
     setValue(v);
-    setSaved(false);
+    setState("saving");
+    pending.current = { threadId, body: v };
     if (timer.current) clearTimeout(timer.current);
-    timer.current = setTimeout(() => {
-      localStorage.setItem(key, v);
-      setSaved(true);
-    }, 400);
+    timer.current = setTimeout(() => void flush(), 400);
   };
 
-  const remove = (id: number) => {
-    removeSavedMessage(threadId, id);
-    setPinned(getSavedMessages(threadId));
+  const remove = async (id: number) => {
+    const before = pinned;
+    setPinned((list) => list.filter((m) => m.id !== id));
+    try {
+      await removeSavedMessage(threadId, id, demo);
+    } catch {
+      setPinned(before);
+    }
   };
 
   return (
@@ -53,11 +117,20 @@ export function NotesPanel({
       <section className="flex shrink-0 flex-col gap-2">
         <div className="flex items-baseline justify-between">
           <p className="text-sm font-semibold">Notes on {threadName}</p>
-          <span className="text-[11px] text-muted-foreground">{saved ? "Saved" : "Saving…"}</span>
+          <span
+            className={cn(
+              "text-[11px]",
+              state === "error" ? "text-red-500" : "text-muted-foreground"
+            )}
+          >
+            {state === "error" ? "Not saved — retrying" : state === "saving" ? "Saving…" : "Saved"}
+          </span>
         </div>
         <Textarea
           value={value}
+          disabled={!ready}
           onChange={(e) => onChange(e.target.value)}
+          onBlur={() => void flush()}
           placeholder={`Things to remember about ${threadName} — birthdays, favorites, plans, inside jokes…`}
           className="min-h-[130px] resize-none rounded-xl text-[14px] leading-relaxed"
         />
@@ -113,7 +186,9 @@ export function NotesPanel({
       </section>
 
       <p className="shrink-0 text-[11px] text-muted-foreground">
-        Notes and saved messages are stored privately in this browser.
+        {demo
+          ? "This is sample data — notes here stay in your browser."
+          : "Saved on your Mac in ~/.sidenote — kept through app updates."}
       </p>
     </div>
   );

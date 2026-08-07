@@ -10,6 +10,7 @@ import { AiPanel } from "@/components/ai-panel";
 import { LandingPage } from "@/components/landing-page";
 import { SettingsDialog } from "@/components/settings-dialog";
 import { FdaGuide } from "@/components/fda-guide";
+import { importLegacyNotes } from "@/lib/notes";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -68,6 +69,15 @@ export function SidenoteApp() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [status]);
+
+  // Rescue notes from the era when they lived in localStorage, before the
+  // vault existed. No-op after the first successful run.
+  useEffect(() => {
+    if (status?.mode !== "local") return;
+    importLegacyNotes().catch(() => {
+      // nothing lost — the sweep retries on the next launch
+    });
+  }, [status?.mode]);
 
   // Live mode: keep the sidebar fresh as new texts sync in the background.
   useEffect(() => {
@@ -158,6 +168,7 @@ export function SidenoteApp() {
   };
 
   const activeThread = threads.find((t) => t.id === active?.threadId) ?? null;
+  const demo = status?.mode === "demo";
   const needsSetup = !loading && status?.mode === "local" && !status.synced;
 
   if (needsSetup) {
@@ -260,6 +271,7 @@ export function SidenoteApp() {
             threadId={active.threadId}
             initialAnchor={active.messageId}
             canSend={status?.mode === "local"}
+            demo={demo}
             onBack={() => setActive(null)}
             onOpenPanel={(tab) => {
               setPanel(tab);
@@ -296,6 +308,7 @@ export function SidenoteApp() {
                 <NotesPanel
                   threadId={active.threadId}
                   threadName={activeThread?.name ?? ""}
+                  demo={demo}
                   onJump={(messageId) => {
                     setSheetOpen(false);
                     select(active.threadId, messageId);

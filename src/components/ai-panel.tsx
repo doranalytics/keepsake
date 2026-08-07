@@ -1,9 +1,28 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { CircleStop, Download, RefreshCw, Send, Sparkles } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  Check,
+  ChevronDown,
+  CircleStop,
+  Download,
+  MessageSquarePlus,
+  Pencil,
+  RefreshCw,
+  Send,
+  Sparkles,
+  Trash2,
+} from "lucide-react";
 import type { AppStatus } from "@/lib/types";
 import { onModelChange, resolveModel, saveModel } from "@/lib/model-pref";
+import {
+  createConversation,
+  deleteConversation as deleteConversationApi,
+  listConversations,
+  loadConversation,
+  renameConversation as renameConversationApi,
+  type AiConversation,
+} from "@/lib/ai-threads";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
@@ -24,6 +43,7 @@ export function AiPanel({
   threadName: string;
   status: AppStatus | null;
 }) {
+  const demo = status?.mode === "demo";
   const [ollama, setOllama] = useState<Ollama | null>(status?.ollama ?? null);
   const [checking, setChecking] = useState(false);
   const [entries, setEntries] = useState<Entry[]>([]);
@@ -32,15 +52,41 @@ export function AiPanel({
   const [error, setError] = useState<string | null>(null);
   const [model, setModel] = useState<string | null>(null);
   const [pull, setPull] = useState<{ pct: number; label: string } | null>(null);
+  const [conversations, setConversations] = useState<AiConversation[]>([]);
+  const [currentId, setCurrentId] = useState<string | null>(null);
+  const [pickerOpen, setPickerOpen] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
+  // Open the thread's most recent AI chat. Chats are per iMessage thread and
+  // live in ~/.sidenote/vault.db, so switching away and back keeps them.
   useEffect(() => {
-    setEntries([]);
-    setError(null);
+    if (demo) return;
+    let cancelled = false;
     abortRef.current?.abort();
     setBusy(false);
-  }, [threadId]);
+    setError(null);
+    setEntries([]);
+    setCurrentId(null);
+    setPickerOpen(false);
+    (async () => {
+      try {
+        const list = await listConversations(threadId);
+        if (cancelled) return;
+        setConversations(list);
+        if (!list.length) return;
+        const { messages } = await loadConversation(list[0].id);
+        if (cancelled) return;
+        setCurrentId(list[0].id);
+        setEntries(messages.map((m) => ({ role: m.role, text: m.text })));
+      } catch (e) {
+        if (!cancelled) setError((e as Error).message);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [threadId, demo]);
 
   useEffect(() => {
     if (status?.ollama) setOllama(status.ollama);
@@ -59,6 +105,58 @@ export function AiPanel({
     const el = scrollRef.current;
     if (el) el.scrollTop = el.scrollHeight;
   }, [entries]);
+
+  const openConversation = useCallback(async (id: string) => {
+    abortRef.current?.abort();
+    setBusy(false);
+    setPickerOpen(false);
+    setError(null);
+    try {
+      const { messages } = await loadConversation(id);
+      setCurrentId(id);
+      setEntries(messages.map((m) => ({ role: m.role, text: m.text })));
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  }, []);
+
+  const startNewChat = useCallback(() => {
+    abortRef.current?.abort();
+    setBusy(false);
+    setPickerOpen(false);
+    setError(null);
+    // Created lazily on the first question, so empty chats never pile up.
+    setCurrentId(null);
+    setEntries([]);
+  }, []);
+
+  const removeConversation = async (id: string) => {
+    try {
+      await deleteConversationApi(id);
+      const list = await listConversations(threadId);
+      setConversations(list);
+      if (id !== currentId) return;
+      if (list.length) {
+        await openConversation(list[0].id);
+      } else {
+        setCurrentId(null);
+        setEntries([]);
+      }
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  };
+
+  const rename = async (id: string, title: string) => {
+    try {
+      await renameConversationApi(id, title);
+      setConversations((list) =>
+        list.map((c) => (c.id === id ? { ...c, title } : c))
+      );
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  };
 
   const refresh = async () => {
     setChecking(true);
@@ -127,9 +225,29 @@ export function AiPanel({
     if (busy) return;
     setError(null);
     setBusy(true);
+
+    // Give the exchange a home before it starts, so the server can write the
+    // answer straight into the vault as it finishes.
+    let conversationId = currentId;
+    if (!conversationId) {
+      try {
+        const conv = await createConversation(threadId);
+        conversationId = conv.id;
+        setCurrentId(conv.id);
+        setConversations((list) => [conv, ...list]);
+      } catch (e) {
+        setError((e as Error).message);
+        setBusy(false);
+        return;
+      }
+    }
+
     setEntries((e) => [
       ...e,
-      { role: "user", text: mode === "summarize" ? `Summarize my conversation with ${threadName}` : q! },
+      {
+        role: "user",
+        text: mode === "summarize" ? `Summarize my conversation with ${threadName}` : q!,
+      },
       { role: "ai", text: "" },
     ]);
     const controller = new AbortController();
@@ -138,7 +256,13 @@ export function AiPanel({
       const res = await fetch("/api/ai", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ threadId, mode, question: q, model: model ?? undefined }),
+        body: JSON.stringify({
+          threadId,
+          mode,
+          question: q,
+          model: model ?? undefined,
+          conversationId,
+        }),
         signal: controller.signal,
       });
       if (!res.ok) {
@@ -157,6 +281,8 @@ export function AiPanel({
           return copy;
         });
       }
+      // The server just retitled and reordered this chat as it saved.
+      listConversations(threadId).then(setConversations).catch(() => {});
     } catch (e) {
       if ((e as Error).name !== "AbortError") {
         setError((e as Error).message);
@@ -169,7 +295,7 @@ export function AiPanel({
   };
 
   // ---------- demo mode ----------
-  if (status?.mode === "demo") {
+  if (demo) {
     return (
       <SetupShell
         title="On-device AI"
@@ -241,9 +367,76 @@ export function AiPanel({
     );
   }
 
+  const current = conversations.find((c) => c.id === currentId) ?? null;
+
   // ---------- ready ----------
   return (
     <div className="flex h-full flex-col">
+      {/* chat switcher */}
+      <div className="relative flex shrink-0 items-center gap-1 border-b px-2 py-2">
+        <button
+          onClick={() => setPickerOpen((o) => !o)}
+          className="flex min-w-0 flex-1 items-center gap-1.5 rounded-lg px-2 py-1 text-left hover:bg-black/[0.04] dark:hover:bg-white/[0.06]"
+          title="Switch between AI chats for this conversation"
+        >
+          <span className="truncate text-[13px] font-medium">
+            {current?.title ?? "New chat"}
+          </span>
+          {conversations.length > 0 && (
+            <span className="shrink-0 text-[11px] text-muted-foreground">
+              {conversations.length}
+            </span>
+          )}
+          <ChevronDown
+            className={cn(
+              "size-3.5 shrink-0 text-muted-foreground transition-transform",
+              pickerOpen && "rotate-180"
+            )}
+          />
+        </button>
+        <Button
+          size="icon"
+          variant="ghost"
+          onClick={startNewChat}
+          aria-label="New chat"
+          title="Start another chat about this thread"
+          className="size-8 shrink-0"
+        >
+          <MessageSquarePlus className="size-4" />
+        </Button>
+
+        {pickerOpen && (
+          <>
+            <div className="fixed inset-0 z-40" onClick={() => setPickerOpen(false)} />
+            <div className="absolute top-full left-2 z-50 mt-1 max-h-72 w-[calc(100%-1rem)] overflow-y-auto rounded-xl border bg-background py-1 shadow-lg">
+              {conversations.length === 0 ? (
+                <p className="px-3 py-2 text-[12.5px] text-muted-foreground">
+                  No saved chats yet. Ask something and it&apos;s kept here.
+                </p>
+              ) : (
+                conversations.map((c) => (
+                  <ConversationRow
+                    key={c.id}
+                    conversation={c}
+                    active={c.id === currentId}
+                    onOpen={() => openConversation(c.id)}
+                    onRename={(title) => rename(c.id, title)}
+                    onDelete={() => removeConversation(c.id)}
+                  />
+                ))
+              )}
+              <button
+                onClick={startNewChat}
+                className="mt-1 flex w-full items-center gap-2 border-t px-3 py-2 text-left text-[13px] text-[#0a84ff] hover:bg-black/[0.04] dark:hover:bg-white/[0.06]"
+              >
+                <MessageSquarePlus className="size-3.5" />
+                New chat
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+
       {ollama && ollama.models.length > 1 && (
         <div className="flex shrink-0 items-center gap-2 border-b px-4 py-2">
           <span className="text-[11px] font-medium text-muted-foreground uppercase">Model</span>
@@ -352,6 +545,88 @@ export function AiPanel({
           </Button>
         )}
       </form>
+    </div>
+  );
+}
+
+function ConversationRow({
+  conversation,
+  active,
+  onOpen,
+  onRename,
+  onDelete,
+}: {
+  conversation: AiConversation;
+  active: boolean;
+  onOpen: () => void;
+  onRename: (title: string) => void;
+  onDelete: () => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(conversation.title);
+
+  const commit = () => {
+    const title = draft.trim();
+    setEditing(false);
+    if (title && title !== conversation.title) onRename(title);
+    else setDraft(conversation.title);
+  };
+
+  if (editing) {
+    return (
+      <div className="flex items-center gap-1 px-2 py-1">
+        <Input
+          autoFocus
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") commit();
+            if (e.key === "Escape") {
+              setDraft(conversation.title);
+              setEditing(false);
+            }
+          }}
+          className="h-7 text-[13px]"
+        />
+        <button
+          onClick={commit}
+          aria-label="Save name"
+          className="shrink-0 rounded p-1 text-[#0a84ff] hover:bg-black/[0.04] dark:hover:bg-white/[0.06]"
+        >
+          <Check className="size-3.5" />
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div
+      className={cn(
+        "group flex items-center gap-1 px-1",
+        active && "bg-black/[0.04] dark:bg-white/[0.06]"
+      )}
+    >
+      <button
+        onClick={onOpen}
+        className="min-w-0 flex-1 truncate px-2 py-2 text-left text-[13px]"
+        title={conversation.title}
+      >
+        {conversation.title}
+      </button>
+      <button
+        onClick={() => setEditing(true)}
+        aria-label="Rename chat"
+        className="shrink-0 rounded p-1 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 hover:text-foreground"
+      >
+        <Pencil className="size-3.5" />
+      </button>
+      <button
+        onClick={onDelete}
+        aria-label="Delete chat"
+        className="mr-1 shrink-0 rounded p-1 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 hover:text-red-500"
+      >
+        <Trash2 className="size-3.5" />
+      </button>
     </div>
   );
 }

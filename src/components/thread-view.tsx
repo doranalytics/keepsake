@@ -38,12 +38,14 @@ export function ThreadView({
   threadId,
   initialAnchor,
   canSend,
+  demo,
   onBack,
   onOpenPanel,
 }: {
   threadId: string;
   initialAnchor: number | null;
   canSend: boolean;
+  demo: boolean;
   onBack: () => void;
   onOpenPanel: (tab: "notes" | "ai") => void;
 }) {
@@ -547,10 +549,15 @@ export function ThreadView({
         >
           <button
             className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-[13.5px] hover:bg-black/[0.04] dark:hover:bg-white/[0.06]"
-            onClick={() => {
-              const fresh = saveMessage(threadId, menu.m);
+            onClick={async () => {
+              const m = menu.m;
               setMenu(null);
-              showFlash(fresh ? "Saved — find it in Notes" : "Already saved");
+              try {
+                const fresh = await saveMessage(threadId, m, demo);
+                showFlash(fresh ? "Saved — find it in Notes" : "Already saved");
+              } catch {
+                showFlash("Couldn't save that — try again");
+              }
             }}
           >
             <BookmarkPlus className="size-4 text-[#0a84ff]" />

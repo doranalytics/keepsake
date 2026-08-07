@@ -21,7 +21,12 @@ locally; a web server can't (and shouldn't) read your Messages database.
   (pick a time range), ready to paste into any AI.
 - **On-device AI** — summarize a thread or ask questions about it through
   [Ollama](https://ollama.com), running a local model on your Mac. Sidenote
-  walks you through the setup in-app. No API keys, no cloud.
+  walks you through the setup in-app. No API keys, no cloud. Keep as many
+  separate AI chats per conversation as you like; they're saved and picked
+  back up where you left them.
+- **Kept** — notes, pinned messages, and AI chats are written to
+  `~/.sidenote/vault.db`, separate from the message index. They survive
+  quitting, re-syncing, and updating the app.
 
 ## Install
 
@@ -48,7 +53,8 @@ the default port.
 
 ## Privacy
 
-Sidenote is read-only over your data and fully local: the message index lives
-in `~/.sidenote/`, notes and pinned messages live in your browser's
-localStorage, and AI inference runs on your machine via Ollama. The deployed
-demo contains only fictional sample data.
+Sidenote is read-only over your Messages data and fully local: the message
+index lives in `~/.sidenote/index.db`, your notes, pinned messages, and AI
+chats live in `~/.sidenote/vault.db`, and AI inference runs on your machine
+via Ollama. Nothing is uploaded. The deployed demo contains only fictional
+sample data, and stores its throwaway notes in the browser.
