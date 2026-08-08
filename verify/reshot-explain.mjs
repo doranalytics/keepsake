@@ -16,11 +16,29 @@ const page = await browser.newPage({ viewport: { width: 1360, height: 900 } });
 await page.goto(URL, { waitUntil: "networkidle" });
 await page.waitForSelector("text=Every text.", { timeout: 20000 });
 
+// The homepage must be the homepage — never the app. Linking someone to
+// sidenote.lol used to drop them into the demo once they'd visited before.
+if (await page.locator("[data-mid]").count()) {
+  fail("/ rendered the app instead of the landing page");
+}
+if (!(await page.locator('a[href="/demo"]').count())) {
+  fail("landing has no link to the /demo page");
+}
+console.log("ok: / is the landing page, demo lives at /demo");
+
 const html = await page.content();
 // The bare word "Ollama" is allowed: past changelog entries are a record and
 // legitimately name it. What must be gone is any present-tense claim or
 // instruction — those are what became false when Claude entered the loop.
-for (const stale of ["ollama pull", "100% local", "Runs 100% locally", "runs 100% on your Mac"]) {
+for (const stale of [
+  "ollama pull",
+  "100% local",
+  "Runs 100% locally",
+  "runs 100% on your Mac",
+  "Open Sidenote",
+  "localhost:4747",
+  "prefer the browser",
+]) {
   if (html.includes(stale)) fail(`landing still says "${stale}"`);
 }
 if (!html.includes("Explain this")) fail("landing never mentions Explain this");
@@ -37,7 +55,8 @@ await page.screenshot({ path: "verify/reshot-landing.png", fullPage: false });
 // ---------- 2. demo app: right-click a message ----------
 // The demo is entered from the landing page, not a URL — clicking through is
 // also what a real visitor does.
-await page.getByRole("button", { name: /Browse the demo/ }).click();
+await page.locator('a[href="/demo"]').first().click();
+await page.waitForURL(/\/demo/, { timeout: 15000 });
 await page.waitForTimeout(2000);
 
 // Open the first conversation, then right-click an actual message bubble.
