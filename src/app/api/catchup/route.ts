@@ -2,7 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { getThread, getThreadTexts, isDemo } from "@/lib/store";
 
 export const dynamic = "force-dynamic";
-export const maxDuration = 900;
+// Vercel's ceiling, and irrelevant to the only place this actually runs: the
+// self-hosted server inside Sidenote.app, which doesn't enforce it. Catching up
+// on the largest thread takes a couple of minutes there.
+export const maxDuration = 300;
 
 // "Catching up" on a conversation means embedding it so semantic search works.
 // It is opt-in per thread and nothing is indexed out of the box: most people
