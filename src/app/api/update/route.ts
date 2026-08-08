@@ -31,7 +31,28 @@ async function check(fresh: boolean): Promise<UpdateInfo> {
       // not a git checkout — updates unavailable
     }
   }
+  const isApp = process.env.SIDENOTE_APP === "1";
   let latest: string | null = null;
+
+  // A .app install updates by downloading a new build, so the only version
+  // that matters is the one behind the download button — published as
+  // build.json when the app is built. Repo HEAD is the wrong comparison: it
+  // moves on every docs or script commit, which made a freshly-downloaded app
+  // announce an update to itself the moment it opened.
+  if (isApp) {
+    try {
+      const r = await fetch("https://sidenote.lol/build.json", {
+        signal: AbortSignal.timeout(6000),
+        cache: "no-store",
+      });
+      if (r.ok) latest = ((await r.json()) as { commit?: string }).commit ?? null;
+    } catch {
+      // offline — no check, and no false alarm either
+    }
+    return finish(current, currentDate, latest, isApp);
+  }
+
+  // A git checkout genuinely does `git pull`, so main is the right target.
   try {
     const r = await fetch(REPO_API, {
       headers: { Accept: "application/vnd.github+json" },
@@ -54,13 +75,23 @@ async function check(fresh: boolean): Promise<UpdateInfo> {
   } catch {
     // best effort
   }
+  return finish(current, currentDate, latest, isApp, news);
+}
+
+function finish(
+  current: string | null,
+  currentDate: string | null,
+  latest: string | null,
+  isApp: boolean,
+  news: UpdateInfo["news"] = []
+): UpdateInfo {
   const body: UpdateInfo = {
     current,
     currentDate,
     latest,
     updateAvailable: !!(current && latest && current !== latest),
     managed: process.env.SIDENOTE_MANAGED === "1",
-    app: process.env.SIDENOTE_APP === "1",
+    app: isApp,
     news,
   };
   cached = { at: Date.now(), body };

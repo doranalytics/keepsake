@@ -242,8 +242,7 @@ export function SidenoteApp() {
                     className="flex flex-1 items-center justify-center gap-1.5 px-4 py-1.5 text-center text-[12px] font-medium transition-colors hover:bg-[#0974df]"
                   >
                     <ArrowUpCircle className="size-3.5" />
-                    New version available
-                    {update.news[0] ? `: ${update.news[0].title}` : ""} — download
+                    A newer version of Sidenote is available — download
                   </a>
                 ) : (
                   <button
@@ -259,8 +258,7 @@ export function SidenoteApp() {
                     ) : (
                       <>
                         <ArrowUpCircle className="size-3.5" />
-                        Update available
-                        {update.news[0] ? `: ${update.news[0].title}` : ""} — install now
+                        A newer version of Sidenote is available — install now
                       </>
                     )}
                   </button>

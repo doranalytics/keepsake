@@ -103,4 +103,18 @@ if [[ "$SKIP_NOTARIZE" == 0 ]]; then
 fi
 
 cp "$ZIP" public/Sidenote.zip
+
+# What the download button is currently serving. The installed app compares
+# itself against THIS, not against repo HEAD — otherwise every docs or script
+# commit makes a freshly-downloaded app announce an update to itself.
+cat > public/build.json <<JSON
+{
+  "commit": "$COMMIT",
+  "date": "$COMMIT_DATE",
+  "version": "$VERSION",
+  "build": $BUILD_NUM
+}
+JSON
+
 step "Done → public/Sidenote.zip ($(du -h public/Sidenote.zip | cut -f1))"
+echo "   build.json → $COMMIT (${COMMIT_DATE})"

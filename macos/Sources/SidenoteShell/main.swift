@@ -209,8 +209,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
             let lsregister = "/System/Library/Frameworks/CoreServices.framework"
                 + "/Frameworks/LaunchServices.framework/Support/lsregister"
             let exe = moved.appendingPathComponent("Contents/MacOS/Sidenote").path
+            // While translocated we can't trash the download we're executing
+            // from — the read-only mirror is backed by it. Once this process is
+            // gone the mirror is released, so the detached script does it, and
+            // Downloads stops collecting "Sidenote 2.app", "Sidenote 3.app".
+            let leftover = isTranslocated ? trueBundleURL.path : ""
+            let stamp = Int(Date().timeIntervalSince1970)
             let relaunched = spawnDetached("""
                 while /bin/kill -0 \(getpid()) 2>/dev/null; do /bin/sleep 0.1; done
+                /bin/sleep 1
+                if [ -n "\(leftover)" ] && [ -d "\(leftover)" ]; then
+                  /bin/mv -f "\(leftover)" "$HOME/.Trash/Sidenote-\(stamp).app" 2>/dev/null
+                fi
                 "\(lsregister)" -f "\(moved.path)" 2>/dev/null
                 for i in 1 2 3 4 5 6 7 8 9 10; do
                   /usr/bin/open "\(moved.path)" 2>/dev/null
@@ -263,11 +273,36 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
 
         // Tidy up the copy the user opened — but never while translocated, as
         // the read-only mirror we're executing from is backed by that file.
+        // In that case performMove()'s detached script trashes it after we exit.
         if !isTranslocated {
             _ = try? fm.trashItem(at: source, resultingItemURL: nil)
         }
+        trashSiblingCopies(of: source)
         log("moved to \(dest.path)")
         return dest
+    }
+
+    /// Downloading Sidenote again doesn't overwrite the previous download —
+    /// macOS renames it "Sidenote 2.app", "Sidenote 3.app", and they pile up in
+    /// Downloads. Once we've installed into Applications, the copies sitting
+    /// beside the one you opened are strictly garbage, so trash them. Only
+    /// bundles that really are Sidenote are touched, and trashing is
+    /// recoverable — nothing is deleted outright.
+    func trashSiblingCopies(of source: URL) {
+        let fm = FileManager.default
+        let folder = source.deletingLastPathComponent()
+        guard applicationsDirs.contains(folder.path) == false else { return }
+        let entries = (try? fm.contentsOfDirectory(
+            at: folder, includingPropertiesForKeys: nil)) ?? []
+        for entry in entries where entry.pathExtension == "app" {
+            guard entry.path != source.path,
+                  entry.lastPathComponent.hasPrefix("Sidenote"),
+                  Bundle(url: entry)?.bundleIdentifier == Bundle.main.bundleIdentifier
+            else { continue }
+            if (try? fm.trashItem(at: entry, resultingItemURL: nil)) != nil {
+                log("trashed leftover copy at \(entry.path)")
+            }
+        }
     }
 
     // MARK: - Window
