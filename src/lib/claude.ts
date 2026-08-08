@@ -16,9 +16,16 @@ const KEY_SETTING = "anthropic_api_key";
 // — and tools still run here, on this Mac. Only the model call leaves.
 const RELAY = process.env.SIDENOTE_RELAY ?? "https://sidenote.lol/api/anthropic";
 
-// Ships inside a downloadable app, so this is a speed bump against casual
-// abuse of the relay, not a secret. Real protection needs per-install accounts.
-const CLIENT_TOKEN = process.env.SIDENOTE_CLIENT_SECRET ?? "sidenote-app";
+const INSTALL_SETTING = "install_token";
+
+/** The token this copy of Sidenote got when it redeemed an invite code. */
+export function getInstallToken(): string | null {
+  return getSetting(INSTALL_SETTING);
+}
+
+export function setInstallToken(token: string | null): void {
+  setSetting(INSTALL_SETTING, token);
+}
 
 // The key lives in the vault so it survives app updates and re-syncs. Reading
 // it through one accessor is what makes a hosted/credits proxy a later swap
@@ -36,19 +43,28 @@ export function hasOwnKey(): boolean {
   return !!getApiKey();
 }
 
-/** AI works out of the box through the relay; a personal key just bypasses it. */
+/** AI needs either a redeemed invite code or the user's own Anthropic key. */
 export function aiAvailable(): boolean {
-  return true;
+  return !!getInstallToken() || hasOwnKey();
+}
+
+export class NotRegisteredError extends Error {
+  constructor() {
+    super("Enter your Sidenote invite code to turn on AI.");
+    this.name = "NotRegisteredError";
+  }
 }
 
 function client(): Anthropic {
   const apiKey = getApiKey();
   // A personal key talks to Anthropic directly — no relay, no shared limits.
   if (apiKey) return new Anthropic({ apiKey });
+  const install = getInstallToken();
+  if (!install) throw new NotRegisteredError();
   return new Anthropic({
     apiKey: "relay", // the relay supplies the real one; the SDK needs a value
     baseURL: RELAY,
-    defaultHeaders: { "x-sidenote-client": CLIENT_TOKEN },
+    defaultHeaders: { "x-sidenote-install": install },
   });
 }
 
@@ -113,6 +129,11 @@ export function streamClaude(opts: RunOptions): ReadableStream<Uint8Array> {
             answer += delta;
             controller.enqueue(encoder.encode(delta));
           });
+          // Node throws on an "error" event with no listener, which would take
+          // the whole Sidenote server down on any API failure — a 401, a rate
+          // limit, a dropped connection. The await below surfaces the same
+          // error properly, so this handler only needs to exist.
+          stream.on("error", () => {});
 
           const message = await stream.finalMessage();
 
@@ -178,11 +199,12 @@ export function streamClaude(opts: RunOptions): ReadableStream<Uint8Array> {
 // Anthropic's raw messages leak model ids and status codes into a popover that
 // is three sentences tall. Say the thing the user can act on instead.
 export function friendlyError(e: Error): string {
+  if (e.name === "NotRegisteredError") return e.message;
   const status = (e as { status?: number }).status;
   if (status === 401) {
     return getApiKey()
       ? "That API key was rejected. Check it in Settings."
-      : "Sidenote couldn't authorise this request.";
+      : "This copy of Sidenote is no longer registered. Enter a new invite code in Settings.";
   }
   if (status === 503) return "Sidenote's AI service is unavailable right now.";
   if (status === 429) return "Too many requests — give it a moment.";

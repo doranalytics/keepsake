@@ -16,7 +16,7 @@ export const CHANGELOG: ChangelogEntry[] = [
       "“Explain this” decodes slang, references, and tone using the messages around it — the answer opens right on the bubble, with a follow-up box",
       "“Look this up” identifies a name, band, place, or event; “Help me reply” drafts a response in your voice",
       "Questions about a thread now search its entire history instead of the last few days",
-      "“Catch up” on a conversation to make search find things by meaning, not just wording — runs on your Mac and stays current on its own",
+      "Embed a conversation to make search find things by meaning, not just wording — runs on your Mac, keeps going in the background, and stays current on its own",
       "AI now runs on Claude with your own Anthropic key (Settings › AI); the 17 GB local model is gone",
       "Paste a screenshot into the AI chat and ask about it",
       "sidenote.lol is the homepage again — the live demo has its own page, and Sidenote opens as a Mac app rather than a browser tab",

@@ -677,8 +677,8 @@ export function runIncrementalSync(): number {
   return added;
 }
 
-// Keep already-caught-up threads current as new texts arrive. Threads the user
-// never caught up on are skipped entirely, so for most people this does
+// Keep already-embedded threads current as new texts arrive. Threads the user
+// never embedded are skipped entirely, so for most people this does
 // nothing; for the handful they use, a tick is a few messages and takes
 // milliseconds. Fire-and-forget — a live tick must never wait on it.
 async function embedFresh(rows: { id: number; text: string; threadId: string }[]) {

@@ -51,7 +51,7 @@ export function ThreadList({
   onSync: () => void;
   onSelect: (threadId: string, messageId?: number) => void;
   onOpenSettings: () => void;
-  /** Threads that have been caught up on, so semantic search covers them. */
+  /** Threads that have been embedded, so semantic search covers them. */
   caughtUp?: Set<string>;
 }) {
   const [query, setQuery] = useState("");
@@ -187,11 +187,11 @@ export function ThreadList({
                     <span className="truncate text-[15px] font-semibold">{t.name}</span>
                     {caughtUp?.has(t.id) && (
                       <span
-                        title="Sidenote has caught up on this conversation — questions search it by meaning too"
+                        title="This conversation is embedded — questions search it by meaning too"
                         className="flex shrink-0 self-center"
                       >
                         <BookOpenCheck
-                          aria-label="Caught up"
+                          aria-label="Embedded"
                           className={cn(
                             "size-3.5",
                             activeId === t.id ? "text-white/80" : "text-[#0a84ff]"

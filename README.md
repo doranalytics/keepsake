@@ -28,10 +28,11 @@ locally; a web server can't (and shouldn't) read your Messages database.
 - **Ask a thread** — questions search a conversation's entire history, not just
   the recent window. Keep as many separate AI chats per conversation as you
   like; they're saved and picked back up where you left them.
-- **Catch up** — optionally embed one conversation so search finds things by
-  meaning, not just wording ("money" finding "can you venmo me"). Runs on your
-  Mac, takes about thirty seconds for a big thread, and stays current on its
-  own. Nothing is embedded until you ask for it.
+- **Embed a conversation** — optionally embed one thread so search finds things
+  by meaning, not just wording ("money" finding "can you venmo me"). Runs on
+  your Mac, takes about thirty seconds for a big thread, keeps going in the
+  background if you close the panel, and stays current on its own. Nothing is
+  embedded until you ask for it.
 - **Kept** — notes, pinned messages, and AI chats are written to
   `~/.sidenote/vault.db`, separate from the message index. They survive
   quitting, re-syncing, and updating the app.

@@ -406,7 +406,7 @@ export function retrieveRelevantText(
 // The messages immediately around one bubble — the entire context the
 // right-click popover needs. Explaining "that fit was chopped" takes the
 // conversation around it, not the whole eight-year history, which is why
-// Explain works instantly on a thread that was never caught up.
+// Explain works instantly on a thread that was never embedded.
 export function getMessageWindow(
   threadId: string,
   messageId: number,
@@ -448,7 +448,7 @@ export function getMessageWindow(
   return { text: lines.join("\n"), target };
 }
 
-/** Every message in a thread, for the Catch up pass. */
+/** Every message in a thread, for the embedding pass. */
 export function getThreadTexts(threadId: string): { id: number; text: string }[] {
   if (isDemo) return (demoMessages.get(threadId) ?? []).map((m) => ({ id: m.id, text: m.text }));
   const db = openIndex();
@@ -527,7 +527,7 @@ function ftsIds(threadId: string, query: string, limit: number): number[] {
  *  model. Keyword and semantic each win different questions — keyword when
  *  your words appear literally, semantic when they don't — so both run and the
  *  results are merged. Semantic is skipped silently on threads that were never
- *  caught up, which keeps this working everywhere. */
+ *  embedded, which keeps this working everywhere. */
 export async function searchThread(
   threadId: string,
   query: string,

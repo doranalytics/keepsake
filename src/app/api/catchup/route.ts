@@ -2,31 +2,77 @@ import { NextRequest, NextResponse } from "next/server";
 import { getThread, getThreadTexts, isDemo } from "@/lib/store";
 
 export const dynamic = "force-dynamic";
-// Vercel's ceiling, and irrelevant to the only place this actually runs: the
-// self-hosted server inside Sidenote.app, which doesn't enforce it. Catching up
-// on the largest thread takes a couple of minutes there.
-export const maxDuration = 300;
 
-// "Catching up" on a conversation means embedding it so semantic search works.
-// It is opt-in per thread and nothing is indexed out of the box: most people
-// have real conversations with a dozen people, not five hundred, and a
-// ten-minute wait on first launch would be a tax on people who never ask a
-// single question. Explaining a message needs none of this.
+// Embedding a conversation makes semantic search work on it. It's opt-in per
+// thread and nothing is embedded out of the box: most people talk to a dozen
+// people, not five hundred, and a ten-minute wait on first launch would be a
+// tax on anyone who never asks a question. Explaining a message needs none of
+// this.
+//
+// The work runs as a background job rather than inside the HTTP response.
+// Streaming progress down the response tied the job's life to whoever was
+// watching it, so closing the AI panel killed the embed mid-way. Now the
+// request just starts it; the panel polls, and can come and go freely.
+
+type Job = {
+  threadId: string;
+  done: number;
+  total: number;
+  running: boolean;
+  error?: string;
+  startedAt: number;
+};
+
+// Module scope: one long-lived Node server per Mac app, so this persists for
+// as long as the app is open.
+const jobs = new Map<string, Job>();
+
+function startJob(threadId: string, messages: { id: number; text: string }[]) {
+  const job: Job = {
+    threadId,
+    done: 0,
+    total: messages.length,
+    running: true,
+    startedAt: Date.now(),
+  };
+  jobs.set(threadId, job);
+
+  // Deliberately not awaited — the response returns immediately and this keeps
+  // going on its own.
+  void (async () => {
+    try {
+      const { catchUpThread } = await import("@/lib/embeddings");
+      await catchUpThread(threadId, messages, (p) => {
+        job.done = p.done;
+        job.total = p.total;
+      });
+      job.done = job.total;
+    } catch (e) {
+      job.error = (e as Error).message;
+    } finally {
+      job.running = false;
+    }
+  })();
+}
 
 export async function GET(req: NextRequest) {
   const threadId = req.nextUrl.searchParams.get("threadId");
-  // No threadId → every caught-up thread, so the sidebar can badge them.
+  // No threadId → every embedded thread, so the sidebar can badge them.
   if (!threadId) {
     if (isDemo) return NextResponse.json({ threads: [] });
     const { caughtUpThreads } = await import("@/lib/embeddings");
     return NextResponse.json({ threads: caughtUpThreads() });
   }
-  if (isDemo) return NextResponse.json({ caughtUp: false, available: false, count: 0 });
+  if (isDemo) {
+    return NextResponse.json({ embedded: false, available: false, count: 0, job: null });
+  }
   const { isCaughtUp } = await import("@/lib/embeddings");
+  const job = jobs.get(threadId) ?? null;
   return NextResponse.json({
-    caughtUp: isCaughtUp(threadId),
+    embedded: isCaughtUp(threadId),
     available: true,
     count: getThreadTexts(threadId).length,
+    job: job && { running: job.running, done: job.done, total: job.total, error: job.error },
   });
 }
 
@@ -38,29 +84,13 @@ export async function POST(req: NextRequest) {
   if (!getThread(threadId)) {
     return NextResponse.json({ error: "Thread not found" }, { status: 404 });
   }
-
+  const existing = jobs.get(threadId);
+  if (existing?.running) {
+    return NextResponse.json({ started: false, running: true, done: existing.done, total: existing.total });
+  }
   const messages = getThreadTexts(threadId);
-  const encoder = new TextEncoder();
-
-  // NDJSON progress so the bar can say "4,200 of 11,353" rather than spinning.
-  const stream = new ReadableStream<Uint8Array>({
-    async start(controller) {
-      const send = (o: unknown) => controller.enqueue(encoder.encode(JSON.stringify(o) + "\n"));
-      try {
-        const { catchUpThread } = await import("@/lib/embeddings");
-        send({ status: "starting", total: messages.length });
-        await catchUpThread(threadId, messages, (p) => send({ done: p.done, total: p.total }));
-        send({ status: "done", total: messages.length });
-      } catch (e) {
-        send({ error: (e as Error).message });
-      }
-      controller.close();
-    },
-  });
-
-  return new Response(stream, {
-    headers: { "Content-Type": "application/x-ndjson; charset=utf-8" },
-  });
+  startJob(threadId, messages);
+  return NextResponse.json({ started: true, running: true, done: 0, total: messages.length });
 }
 
 export async function DELETE(req: NextRequest) {
@@ -68,5 +98,6 @@ export async function DELETE(req: NextRequest) {
   if (!threadId || isDemo) return NextResponse.json({ ok: false });
   const { forgetThread } = await import("@/lib/embeddings");
   forgetThread(threadId);
+  jobs.delete(threadId);
   return NextResponse.json({ ok: true });
 }

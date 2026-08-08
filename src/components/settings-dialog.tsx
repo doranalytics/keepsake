@@ -157,39 +157,39 @@ export function SettingsDialog({
   onUpdate?: () => void;
   onCheckUpdate?: () => Promise<UpdateInfo | null>;
 }) {
-  type KeyState = { configured: boolean; hint: string | null; fromEnv: boolean };
-  const [key, setKey] = useState<KeyState | null>(null);
+  type Access = { registered: boolean; ownKey: boolean };
+  const [access, setAccess] = useState<Access | null>(null);
   const [draft, setDraft] = useState("");
   const [saving, setSaving] = useState(false);
   const [keyError, setKeyError] = useState<string | null>(null);
 
-  const loadKey = async () => {
+  const loadAccess = async () => {
     try {
-      setKey((await fetch("/api/ai/key").then((r) => r.json())) as KeyState);
+      setAccess((await fetch("/api/ai/access").then((r) => r.json())) as Access);
     } catch {
-      // offline or mid-restart — the section just shows the empty state
+      // offline or mid-restart — the section falls back to the empty state
     }
   };
 
   useEffect(() => {
-    if (open && status?.mode === "local") loadKey();
+    if (open && status?.mode === "local") loadAccess();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
-  const saveKey = async () => {
+  const redeem = async () => {
     const value = draft.trim();
     if (!value) return;
     setSaving(true);
     setKeyError(null);
     try {
-      const res = await fetch("/api/ai/key", {
+      const res = await fetch("/api/ai/access", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ key: value }),
+        body: JSON.stringify({ code: value }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data?.error ?? "Couldn't save that key.");
-      setKey(data as KeyState);
+      if (!res.ok) throw new Error(data?.error ?? "Couldn't check that code.");
+      setAccess(data as Access);
       setDraft("");
     } catch (e) {
       setKeyError((e as Error).message);
@@ -198,10 +198,10 @@ export function SettingsDialog({
     }
   };
 
-  const removeKey = async () => {
+  const forget = async () => {
     setKeyError(null);
     try {
-      setKey((await fetch("/api/ai/key", { method: "DELETE" }).then((r) => r.json())) as KeyState);
+      setAccess((await fetch("/api/ai/access", { method: "DELETE" }).then((r) => r.json())) as Access);
     } catch (e) {
       setKeyError((e as Error).message);
     }
@@ -225,79 +225,57 @@ export function SettingsDialog({
             <h3 className="text-[13px] font-semibold">AI</h3>
             {isDemo ? (
               <p className="mt-1.5 text-[13px] leading-relaxed text-muted-foreground">
-                This is the demo. On your Mac, right-click any message and
-                Sidenote explains it using the conversation around it — no
-                setup, no API key needed.
+                This is the demo. On your Mac, right-click any message and Sidenote explains it
+                using the conversation around it.
               </p>
-            ) : key?.configured ? (
+            ) : access?.registered ? (
               <>
                 <p className="mt-1.5 text-[13px] leading-relaxed text-muted-foreground">
-                  Using your own Anthropic key{" "}
-                  <span className="font-mono text-[12px] text-foreground">{key.hint}</span>, so
-                  requests go straight to Anthropic and are billed to you.
+                  {access.ownKey
+                    ? "Running on your own Anthropic key, billed to you."
+                    : "AI is on. Explaining a message sends only the few messages around it, and only when you ask — the rest of your archive stays on this Mac."}
                 </p>
-                {key.fromEnv ? (
-                  <p className="mt-2.5 text-[12px] text-muted-foreground">
-                    Set by ANTHROPIC_API_KEY in the environment, so it can&apos;t be removed here.
-                  </p>
-                ) : (
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={removeKey}
-                    className="mt-3 h-8 rounded-lg text-[12.5px]"
-                  >
-                    <Trash2 className="mr-1.5 size-3.5" />
-                    Use Sidenote&apos;s AI instead
-                  </Button>
-                )}
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={forget}
+                  className="mt-3 h-8 rounded-lg text-[12.5px]"
+                >
+                  <Trash2 className="mr-1.5 size-3.5" />
+                  Use a different code
+                </Button>
               </>
             ) : (
               <>
                 <p className="mt-1.5 text-[13px] leading-relaxed text-muted-foreground">
-                  AI is built in — nothing to set up. Explaining a message sends only the few
-                  messages around it, and only when you ask. The rest of your archive never
-                  leaves this Mac.
+                  Enter your invite code to turn on AI. One time, then it works everywhere in
+                  Sidenote.
                 </p>
-                <details className="group mt-3">
-                  <summary className="cursor-pointer list-none text-[12.5px] text-muted-foreground hover:text-foreground">
-                    Use your own Anthropic key instead ›
-                  </summary>
-                  <p className="mt-2 text-[12px] leading-relaxed text-muted-foreground">
-                    Sends requests straight to Anthropic on your own account, bypassing
-                    Sidenote&apos;s shared limits.
-                  </p>
-                  <div className="mt-2.5 flex items-center gap-2">
-                    <Input
-                      type="password"
-                      value={draft}
-                      onChange={(e) => setDraft(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") saveKey();
-                      }}
-                      placeholder="sk-ant-…"
-                      autoComplete="off"
-                      spellCheck={false}
-                      className="h-9 flex-1 text-[13px]"
-                    />
-                    <Button
-                      size="sm"
-                      onClick={saveKey}
-                      disabled={saving || !draft.trim()}
-                      className="h-9 shrink-0 rounded-lg bg-[#0a84ff] text-[12.5px] hover:bg-[#0974df]"
-                    >
-                      {saving ? <RefreshCw className="size-3.5 animate-spin" /> : "Use it"}
-                    </Button>
-                  </div>
-                </details>
+                <div className="mt-3 flex items-center gap-2">
+                  <Input
+                    value={draft}
+                    onChange={(e) => setDraft(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") redeem();
+                    }}
+                    placeholder="Invite code"
+                    autoComplete="off"
+                    spellCheck={false}
+                    className="h-9 flex-1 text-[13px]"
+                  />
+                  <Button
+                    size="sm"
+                    onClick={redeem}
+                    disabled={saving || !draft.trim()}
+                    className="h-9 shrink-0 rounded-lg bg-[#0a84ff] text-[12.5px] hover:bg-[#0974df]"
+                  >
+                    {saving ? <RefreshCw className="size-3.5 animate-spin" /> : "Turn on"}
+                  </Button>
+                </div>
               </>
             )}
-            {keyError && (
-              <p className="mt-2.5 text-[12.5px] text-red-500">{keyError}</p>
-            )}
+            {keyError && <p className="mt-2.5 text-[12.5px] text-red-500">{keyError}</p>}
           </section>
-
-          <Separator />
 
           {/* ---------- Getting back in ---------- */}
           <section>

@@ -7,6 +7,7 @@ import {
   ChevronDown,
   CircleStop,
   ImagePlus,
+  RefreshCw,
   MessageSquarePlus,
   Pencil,
   Send,
@@ -28,7 +29,13 @@ import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 
 type Entry = { role: "user" | "ai"; text: string };
-type CatchUp = { caughtUp: boolean; available: boolean; count: number };
+type JobState = { running: boolean; done: number; total: number; error?: string } | null;
+type EmbedState = {
+  embedded: boolean;
+  available: boolean;
+  count: number;
+  job: JobState;
+};
 type Pasted = { data: string; mime: string; url: string };
 
 // Screenshots off a Retina display are routinely 3-5 MB, which is at or over
@@ -74,6 +81,33 @@ export function AiPanel({
   status: AppStatus | null;
 }) {
   const demo = status?.mode === "demo";
+  const registered = !!status?.ai?.configured;
+  const [code, setCode] = useState("");
+  const [redeeming, setRedeeming] = useState(false);
+  const [codeError, setCodeError] = useState<string | null>(null);
+
+  const redeem = async () => {
+    const value = code.trim();
+    if (!value) return;
+    setRedeeming(true);
+    setCodeError(null);
+    try {
+      const res = await fetch("/api/ai/access", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code: value }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error ?? "Couldn't check that code.");
+      // The status poll in the app shell picks the change up; reload so every
+      // AI surface unlocks at once.
+      window.location.reload();
+    } catch (e) {
+      setCodeError((e as Error).message);
+    } finally {
+      setRedeeming(false);
+    }
+  };
   const [entries, setEntries] = useState<Entry[]>([]);
   const [question, setQuestion] = useState("");
   const [busy, setBusy] = useState(false);
@@ -81,8 +115,8 @@ export function AiPanel({
   const [conversations, setConversations] = useState<AiConversation[]>([]);
   const [currentId, setCurrentId] = useState<string | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
-  const [catchUp, setCatchUp] = useState<CatchUp | null>(null);
-  const [reading, setReading] = useState<{ done: number; total: number } | null>(null);
+  const [embed, setEmbed] = useState<EmbedState | null>(null);
+  const [job, setJob] = useState<JobState>(null);
   const [image, setImage] = useState<Pasted | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -98,7 +132,7 @@ export function AiPanel({
     setEntries([]);
     setCurrentId(null);
     setPickerOpen(false);
-    setReading(null);
+    setJob(null);
     setImage(null);
     (async () => {
       try {
@@ -117,10 +151,14 @@ export function AiPanel({
       try {
         const c = (await fetch(
           `/api/catchup?threadId=${encodeURIComponent(threadId)}`
-        ).then((r) => r.json())) as CatchUp;
-        if (!cancelled) setCatchUp(c);
+        ).then((r) => r.json())) as EmbedState;
+        if (cancelled) return;
+        setEmbed(c);
+        // An embed started earlier may still be running — pick the progress
+        // back up rather than pretending nothing is happening.
+        if (c.job?.running) setJob(c.job);
       } catch {
-        // catching up is optional — questions still work without it
+        // embedding is optional — questions still work without it
       }
     })();
     return () => {
@@ -183,52 +221,51 @@ export function AiPanel({
     }
   };
 
-  // Embeds the thread so semantic search works on it. Opt-in and per thread:
-  // most people talk to a dozen people, not five hundred, and asking everyone
-  // to wait through the whole archive up front would be a tax on people who
-  // never ask a question.
-  const startCatchUp = async () => {
+  // Starts the embed as a background job on the server and follows it by
+  // polling. The work is no longer tied to this component being mounted, so
+  // closing the AI panel — or switching threads — leaves it running.
+  const startEmbed = async () => {
     setError(null);
-    setReading({ done: 0, total: catchUp?.count ?? 0 });
+    setJob({ running: true, done: 0, total: embed?.count ?? 0 });
     try {
       const res = await fetch("/api/catchup", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ threadId }),
       });
-      if (!res.ok || !res.body) throw new Error("Couldn't start.");
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-      let buf = "";
-      for (;;) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buf += decoder.decode(value, { stream: true });
-        const lines = buf.split("\n");
-        buf = lines.pop() ?? "";
-        for (const line of lines) {
-          if (!line.trim()) continue;
-          const j = JSON.parse(line) as {
-            done?: number;
-            total?: number;
-            status?: string;
-            error?: string;
-          };
-          if (j.error) throw new Error(j.error);
-          if (j.done !== undefined && j.total !== undefined) {
-            setReading({ done: j.done, total: j.total });
-          }
-        }
-      }
-      setCatchUp((c) => (c ? { ...c, caughtUp: true } : c));
-      // Tell the sidebar so its badge appears without a reload.
-      window.dispatchEvent(new Event("sidenote:caught-up"));
+      if (!res.ok) throw new Error("Couldn't start embedding.");
     } catch (e) {
       setError((e as Error).message);
-    } finally {
-      setReading(null);
+      setJob(null);
     }
   };
+
+  // Poll while a job is running for the thread on screen.
+  useEffect(() => {
+    if (!job?.running) return;
+    let alive = true;
+    const tick = async () => {
+      try {
+        const c = (await fetch(
+          `/api/catchup?threadId=${encodeURIComponent(threadId)}`
+        ).then((r) => r.json())) as EmbedState;
+        if (!alive) return;
+        setEmbed(c);
+        setJob(c.job);
+        if (c.job?.error) setError(c.job.error);
+        if (!c.job?.running && c.embedded) {
+          window.dispatchEvent(new Event("sidenote:caught-up"));
+        }
+      } catch {
+        // transient — next tick
+      }
+    };
+    const t = setInterval(tick, 1000);
+    return () => {
+      alive = false;
+      clearInterval(t);
+    };
+  }, [job?.running, threadId]);
 
   const attach = useCallback(async (file: File | null) => {
     if (!file) return;
@@ -245,12 +282,10 @@ export function AiPanel({
   useEffect(() => {
     if (demo) return;
     type Bridge = { postMessage: (v: unknown) => void };
-    const shell = (
-      window as unknown as {
-        webkit?: { messageHandlers?: { clipboardImage?: Bridge } };
-        __sidenoteClipboardImage?: (dataUrl: string | null) => void;
-      }
-    );
+    const shell = window as unknown as {
+      webkit?: { messageHandlers?: { clipboardImage?: Bridge } };
+      __sidenoteClipboardImage?: (dataUrl: string | null) => void;
+    };
 
     // The native shell answers here with a data URL, or null if the pasteboard
     // held no image after all.
@@ -356,6 +391,39 @@ export function AiPanel({
     }
   };
 
+  // ---------- not registered yet ----------
+  if (!demo && !registered) {
+    return (
+      <SetupShell
+        title="Turn on AI"
+        body="Enter the invite code you were given. One time, then AI works everywhere in Sidenote."
+      >
+        <div className="mt-1 flex w-full max-w-[260px] items-center gap-2">
+          <Input
+            value={code}
+            onChange={(e) => setCode(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") redeem();
+            }}
+            placeholder="Invite code"
+            autoComplete="off"
+            spellCheck={false}
+            className="h-9 flex-1 text-[13px]"
+          />
+          <Button
+            size="sm"
+            onClick={redeem}
+            disabled={redeeming || !code.trim()}
+            className="h-9 shrink-0 rounded-lg bg-[#0a84ff] text-[12.5px] hover:bg-[#0974df]"
+          >
+            {redeeming ? <RefreshCw className="size-3.5 animate-spin" /> : "Turn on"}
+          </Button>
+        </div>
+        {codeError && <p className="text-[12.5px] text-red-500">{codeError}</p>}
+      </SetupShell>
+    );
+  }
+
   // ---------- demo mode ----------
   if (demo) {
     return (
@@ -436,46 +504,46 @@ export function AiPanel({
         )}
       </div>
 
-      {/* catch up */}
-      {catchUp?.available && !catchUp.caughtUp && (
+      {/* embed this conversation */}
+      {embed?.available && !embed.embedded && (
         <div className="shrink-0 border-b bg-black/[0.02] px-4 py-2.5 dark:bg-white/[0.03]">
-          {reading ? (
+          {job?.running ? (
             <>
               <div className="h-1.5 overflow-hidden rounded-full bg-black/[0.08] dark:bg-white/10">
                 <div
                   className="h-full rounded-full bg-[#0a84ff] transition-all duration-300"
                   style={{
-                    width: `${reading.total ? Math.round((reading.done / reading.total) * 100) : 0}%`,
+                    width: `${job.total ? Math.round((job.done / job.total) * 100) : 0}%`,
                   }}
                 />
               </div>
               <p className="mt-1.5 text-[12px] text-muted-foreground">
-                Catching up… {reading.done.toLocaleString()} of{" "}
-                {reading.total.toLocaleString()} messages
+                Embedding… {job.done.toLocaleString()} of {job.total.toLocaleString()} messages —
+                keeps going if you close this panel
               </p>
             </>
           ) : (
             <div className="flex items-center justify-between gap-3">
               <p className="text-[12px] leading-snug text-muted-foreground">
-                Catch up on this chat so questions can find things by meaning,
+                Embed this conversation so questions can find things by meaning,
                 not just wording.
               </p>
               <Button
                 size="sm"
                 variant="outline"
-                onClick={startCatchUp}
+                onClick={startEmbed}
                 className="h-7 shrink-0 rounded-lg text-[12px]"
               >
-                Catch up
+                Embed convo
               </Button>
             </div>
           )}
         </div>
       )}
-      {catchUp?.caughtUp && !reading && (
+      {embed?.embedded && !job?.running && (
         <div className="flex shrink-0 items-center gap-1.5 border-b px-4 py-1.5 text-[11.5px] text-muted-foreground">
           <BookOpenCheck className="size-3.5 text-[#0a84ff]" />
-          Caught up on this conversation
+          Conversation embedded
         </div>
       )}
 

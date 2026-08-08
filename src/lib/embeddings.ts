@@ -103,7 +103,7 @@ const dot = (blob: Buffer, q: Float32Array): number => {
 export type CatchUpProgress = { done: number; total: number };
 
 /** Embed every not-yet-embedded message in a thread. `onProgress` drives the
- *  "Catching up… 4,200 of 11,353" bar. */
+ *  "Embedding… 4,200 of 11,353" bar. */
 export async function catchUpThread(
   threadId: string,
   messages: { id: number; text: string }[],

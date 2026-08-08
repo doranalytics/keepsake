@@ -46,7 +46,7 @@ export function SidenoteApp() {
   // The sha whose update banner has been dismissed. A new release writes a
   // different sha, so the banner returns once per version instead of nagging.
   const [dismissed, setDismissed] = useState<string | null>(null);
-  // Which threads have been caught up on, for the sidebar badge.
+  // Which threads have been embedded, for the sidebar badge.
   const [caughtUp, setCaughtUp] = useState<Set<string>>(new Set());
 
   const refresh = useCallback(async () => {

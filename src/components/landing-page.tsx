@@ -126,17 +126,15 @@ export function LandingPage() {
         {showSetup && (
           <div className="mx-auto mt-10 max-w-2xl rounded-3xl border border-black/[0.08] bg-white p-7 text-left shadow-lg md:p-9 dark:border-white/10 dark:bg-[#141416]">
             <p className="text-[19px] font-semibold tracking-tight md:text-[21px]">
-              You&apos;re three steps from your first search
+              Opening it for the first time
             </p>
             <p className="mt-1 text-[13.5px] text-[#6e6e73] dark:text-[#a1a1a6]">
-              Signed and notarized for macOS — no Terminal, no installer. Needs a Mac with Apple
-              silicon (any Mac from 2021 on).
+              Requires a Mac with Apple silicon — any Mac from 2021 on.
             </p>
             <ol className="mt-5 space-y-3">
               {[
-                <>Open the downloaded <span className="font-medium text-[#1d1d1f] dark:text-[#f5f5f7]">Sidenote.zip</span>, then drag <span className="font-medium text-[#1d1d1f] dark:text-[#f5f5f7]">Sidenote</span> into your Applications folder and open it.</>,
-                <>Click <span className="font-medium text-[#1d1d1f] dark:text-[#f5f5f7]">Sync your Messages</span> in the app.</>,
-                <>Flip one macOS switch (Full Disk Access) so Sidenote can read your Messages. The app walks you through it, buttons and all.</>,
+                <>Double-click the download, then open <span className="font-medium text-[#1d1d1f] dark:text-[#f5f5f7]">Sidenote</span>. It offers to move itself to Applications — say yes.</>,
+                <>Give it permission to read Messages. macOS asks you to flip one switch; Sidenote shows you exactly which, and takes it from there.</>,
               ].map((step, i) => (
                 <li
                   key={i}
@@ -149,30 +147,11 @@ export function LandingPage() {
                 </li>
               ))}
             </ol>
-            <div className="mt-6 border-t border-black/[0.06] pt-5 dark:border-white/10">
-              <p className="text-[15px] font-semibold">
-                Optional: AI that explains messages{" "}
-                <span className="font-normal text-[#6e6e73] dark:text-[#a1a1a6]">
-                  — right-click any text
-                </span>
-              </p>
-              <p className="mt-1 text-[13.5px] leading-relaxed text-[#6e6e73] dark:text-[#a1a1a6]">
-                Right-click a message and pick{" "}
-                <span className="font-medium text-[#1d1d1f] dark:text-white">Explain this</span> to
-                decode slang, references, and tone — using the conversation around it, so you stop
-                pasting texts into another app to work out what someone meant. Paste an{" "}
-                <a
-                  href="https://console.anthropic.com/settings/keys"
-                  target="_blank"
-                  rel="noreferrer"
-                  className="font-medium text-[#0a84ff] underline underline-offset-2"
-                >
-                  Anthropic API key
-                </a>{" "}
-                into Settings to switch it on. Only the messages around the one you ask about are
-                sent, and only when you ask — the rest of your archive never goes anywhere.
-              </p>
-            </div>
+            <p className="mt-5 border-t border-black/[0.06] pt-5 text-[13.5px] leading-relaxed text-[#6e6e73] dark:text-[#a1a1a6]">
+              Then it syncs, and everything works — search, notes, and AI included. Your messages
+              are indexed on your Mac; asking about one sends just that message and the few around
+              it, and only when you ask.
+            </p>
           </div>
         )}
 

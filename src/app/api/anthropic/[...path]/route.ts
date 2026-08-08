@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { verifyInstall } from "@/app/api/register/route";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
@@ -9,25 +10,31 @@ export const maxDuration = 300;
 // including its tool loop — works unchanged. Tools still execute on the user's
 // Mac: only the model call crosses the wire.
 //
-// ⚠️  This spends the operator's Anthropic balance. The shared secret below is
-// baked into a downloadable app, so treat it as obfuscation, not security —
-// anyone determined can extract it. It stops casual abuse and nothing more.
-// Before a wide launch this needs real per-install accounts and metering.
+// Access is per install: a copy of Sidenote redeems an invite code once (see
+// /api/register) and sends the resulting signed token here. Removing a code
+// from SIDENOTE_INVITE_CODES revokes every install that used it, which is the
+// answer to "my friend forwarded the app to someone".
+//
+// ⚠️  Still not a hard boundary: whoever holds a valid code — or extracts a
+// token from their own install — can call this directly and spend the
+// operator's Anthropic balance. Per-IP limits and a billing cap on the
+// Anthropic key are what actually bound the damage until usage metering exists.
 
 const UPSTREAM = "https://api.anthropic.com";
 const ALLOWED = new Set(["v1/messages"]);
 
-// Per-IP sliding window. In-memory, so it resets on cold start and isn't
-// shared across regions — a speed bump, not a quota.
+// Per-install sliding window, sized to what a person actually does: asking
+// about your own texts is a handful of questions a minute, not thirty.
+// In-memory, so it resets on cold start and isn't shared across regions.
 const WINDOW_MS = 60_000;
-const MAX_PER_WINDOW = 30;
+const MAX_PER_WINDOW = 12;
 const hits = new Map<string, number[]>();
 
-function rateLimited(ip: string): boolean {
+function rateLimited(key: string): boolean {
   const now = Date.now();
-  const recent = (hits.get(ip) ?? []).filter((t) => now - t < WINDOW_MS);
+  const recent = (hits.get(key) ?? []).filter((t) => now - t < WINDOW_MS);
   recent.push(now);
-  hits.set(ip, recent);
+  hits.set(key, recent);
   if (hits.size > 5000) hits.clear(); // crude bound on memory
   return recent.length > MAX_PER_WINDOW;
 }
@@ -41,19 +48,15 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ path: stri
     );
   }
 
-  const secret = process.env.SIDENOTE_CLIENT_SECRET;
-  if (secret && req.headers.get("x-sidenote-client") !== secret) {
+  const install = verifyInstall(req.headers.get("x-sidenote-install"));
+  if (!install) {
     return NextResponse.json(
-      { error: { message: "Not authorised." } },
+      { error: { message: "This copy of Sidenote isn't registered." } },
       { status: 401 }
     );
   }
 
-  const ip =
-    req.headers.get("x-forwarded-for")?.split(",")[0].trim() ??
-    req.headers.get("x-real-ip") ??
-    "unknown";
-  if (rateLimited(ip)) {
+  if (rateLimited(install.installId)) {
     return NextResponse.json(
       { error: { message: "Too many requests — give it a minute." } },
       { status: 429 }
