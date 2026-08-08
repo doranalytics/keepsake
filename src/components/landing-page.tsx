@@ -3,11 +3,10 @@
 /* eslint-disable @next/next/no-img-element */
 
 import { useEffect, useState } from "react";
-import { ArrowUpRight, Check, Copy, Download, Lock } from "lucide-react";
+import { Download, Lock } from "lucide-react";
 import { CHANGELOG } from "@/lib/changelog";
 import { Button } from "@/components/ui/button";
 
-const INSTALL_CMD = "curl -fsSL https://sidenote.lol/install.sh | bash";
 const DOWNLOAD_URL = "/Sidenote.zip";
 const APP_URL = "http://localhost:4747";
 
@@ -30,93 +29,44 @@ function useLocalApp() {
   return running;
 }
 
+// Sidenote is a Mac app, so this never offers to "open" anything in a browser
+// tab — that just showed the local server's web UI and made the product feel
+// like a website. If the app is running here, the only useful thing the site
+// can tell you is whether there's a newer build to download.
 function AlreadyInstalled({ running }: { running: boolean | null }) {
-  const [showHelp, setShowHelp] = useState(false);
-
-  if (running) {
-    return (
-      <div className="mt-8 flex justify-center">
-        <a
-          href={APP_URL}
-          className="group flex items-center gap-2.5 rounded-full border border-[#30d158]/30 bg-[#30d158]/10 py-2 pr-4 pl-3.5 text-[13.5px] font-medium text-[#1d1d1f] transition-colors hover:bg-[#30d158]/20 dark:text-[#f5f5f7]"
-        >
-          <span className="relative flex size-2">
-            <span className="absolute inline-flex size-full animate-ping rounded-full bg-[#30d158] opacity-60" />
-            <span className="relative inline-flex size-2 rounded-full bg-[#30d158]" />
-          </span>
-          Sidenote is running on this Mac — open it
-          <ArrowUpRight className="size-4 text-[#6e6e73] transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5 dark:text-[#a1a1a6]" />
-        </a>
-      </div>
-    );
-  }
+  const latest = CHANGELOG[0];
+  if (!running) return null;
 
   return (
-    <div className="mt-8 text-[13.5px] text-[#6e6e73] dark:text-[#a1a1a6]">
-      Already installed?{" "}
-      <a
-        href={APP_URL}
-        className="font-medium text-[#0a84ff] hover:underline"
-        onClick={() => setShowHelp(true)}
+    <div className="mx-auto mt-8 max-w-md rounded-2xl border border-[#30d158]/30 bg-[#30d158]/[0.07] p-4 text-center">
+      <p className="flex items-center justify-center gap-2 text-[13.5px] font-medium">
+        <span className="relative flex size-2">
+          <span className="absolute inline-flex size-full animate-ping rounded-full bg-[#30d158] opacity-60" />
+          <span className="relative inline-flex size-2 rounded-full bg-[#30d158]" />
+        </span>
+        Sidenote is installed on this Mac
+      </p>
+      <p className="mt-1.5 text-[13px] leading-relaxed text-[#6e6e73] dark:text-[#a1a1a6]">
+        Latest version is{" "}
+        <span className="font-medium text-[#1d1d1f] dark:text-[#f5f5f7]">{latest.date}</span> —{" "}
+        {latest.title.charAt(0).toLowerCase() + latest.title.slice(1)}. Download it and drag it
+        into Applications to replace the copy you have; your messages, notes, and pins stay put.
+      </p>
+      <Button
+        asChild
+        size="sm"
+        className="mt-3 h-9 rounded-full bg-[#0a84ff] px-4 text-[13px] hover:bg-[#0974df]"
       >
-        Open Sidenote →
-      </a>
-      {running === false && (
-        <>
-          {" · "}
-          <button
-            onClick={() => setShowHelp((s) => !s)}
-            className="font-medium text-[#0a84ff] hover:underline"
-          >
-            not starting?
-          </button>
-        </>
-      )}
-      {showHelp && (
-        <div className="mx-auto mt-4 max-w-md rounded-2xl border border-black/[0.08] bg-white p-5 text-left dark:border-white/10 dark:bg-[#141416]">
-          <p className="text-[13.5px] leading-relaxed text-[#6e6e73] dark:text-[#a1a1a6]">
-            Sidenote runs at{" "}
-            <span className="font-medium text-[#1d1d1f] dark:text-[#f5f5f7]">
-              {APP_URL.replace("http://", "")}
-            </span>
-            . If that page won&apos;t load, open{" "}
-            <span className="font-medium text-[#1d1d1f] dark:text-[#f5f5f7]">
-              Sidenote
-            </span>{" "}
-            from your Applications folder. On a Terminal-based install, paste
-            the install command again — it just relaunches, in seconds:
-          </p>
-          <SmallCopy text={INSTALL_CMD} />
-        </div>
-      )}
+        <a href={DOWNLOAD_URL} download>
+          <Download className="mr-1.5 size-3.5" />
+          Download the latest
+        </a>
+      </Button>
     </div>
   );
 }
 
-function SmallCopy({ text }: { text: string }) {
-  const [copied, setCopied] = useState(false);
-  return (
-    <button
-      onClick={() => {
-        navigator.clipboard.writeText(text);
-        setCopied(true);
-        setTimeout(() => setCopied(false), 1600);
-      }}
-      className="group mt-3 flex w-full items-center justify-between gap-3 rounded-xl bg-[#1d1d1f] px-4 py-3 text-left font-mono text-[13px] text-[#7ee787] transition-colors hover:bg-black dark:bg-black dark:ring-1 dark:ring-white/10"
-    >
-      <span className="min-w-0 truncate">{text}</span>
-      {copied ? (
-        <span className="flex shrink-0 items-center gap-1 font-sans text-[11px] font-medium text-white">
-          <Check className="size-3.5" /> Copied
-        </span>
-      ) : (
-        <Copy className="size-4 shrink-0 text-white/40 group-hover:text-white" />
-      )}
-    </button>
-  );
-}
-
-export function LandingPage({ onEnterDemo }: { onEnterDemo: () => void }) {
+export function LandingPage() {
   const [showSetup, setShowSetup] = useState(false);
   const running = useLocalApp();
 
@@ -125,20 +75,9 @@ export function LandingPage({ onEnterDemo }: { onEnterDemo: () => void }) {
       <header className="mx-auto flex max-w-5xl items-center justify-between px-6 py-5">
         <span className="text-[17px] font-semibold tracking-tight">Sidenote</span>
         <div className="flex items-center gap-5">
-          {running && (
-            <a
-              href={APP_URL}
-              className="text-[13px] font-medium text-[#0a84ff] hover:underline"
-            >
-              Open Sidenote
-            </a>
-          )}
-          <button
-            onClick={onEnterDemo}
-            className="text-[13px] font-medium text-[#0a84ff] hover:underline"
-          >
+          <a href="/demo" className="text-[13px] font-medium text-[#0a84ff] hover:underline">
             Live demo
-          </button>
+          </a>
         </div>
       </header>
 
@@ -154,8 +93,8 @@ export function LandingPage({ onEnterDemo }: { onEnterDemo: () => void }) {
           Remembered.
         </h1>
         <p className="mx-auto mt-5 max-w-[34ch] text-[17px] leading-relaxed text-[#6e6e73] md:text-[19px] dark:text-[#a1a1a6]">
-          Search your entire iMessage history, pin the moments that matter, and ask AI about any
-          conversation.
+          Search your entire iMessage history, pin the moments that matter, and right-click any
+          message to ask what it means.
         </p>
 
         <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
@@ -169,11 +108,11 @@ export function LandingPage({ onEnterDemo }: { onEnterDemo: () => void }) {
             </a>
           </Button>
           <Button
-            onClick={onEnterDemo}
+            asChild
             variant="ghost"
             className="h-12 rounded-full px-6 text-[15px] font-medium text-[#0a84ff] hover:bg-[#0a84ff]/5"
           >
-            Browse the demo →
+            <a href="/demo">Browse the demo →</a>
           </Button>
         </div>
 
@@ -233,13 +172,6 @@ export function LandingPage({ onEnterDemo }: { onEnterDemo: () => void }) {
                 into Settings to switch it on. Only the messages around the one you ask about are
                 sent, and only when you ask — the rest of your archive never goes anywhere.
               </p>
-            </div>
-            <div className="mt-6 border-t border-black/[0.06] pt-5 dark:border-white/10">
-              <p className="text-[13.5px] leading-relaxed text-[#6e6e73] dark:text-[#a1a1a6]">
-                On an Intel Mac, or just prefer the browser? One Terminal command installs the
-                browser version at localhost:4747:
-              </p>
-              <SmallCopy text={INSTALL_CMD} />
             </div>
           </div>
         )}

@@ -28,6 +28,8 @@ export async function POST(req: NextRequest) {
     mode: "summarize" | "ask";
     question?: string;
     conversationId?: string;
+    /** A screenshot pasted into the chat box. */
+    image?: { data: string; mime: string };
   };
   const thread = getThread(body.threadId);
   if (!thread) {
@@ -81,10 +83,31 @@ export async function POST(req: NextRequest) {
       ? `Here are the most recent messages:\n\n${recent}\n\nSummarize this conversation: the key facts, plans, and anything worth remembering about ${thread.name}. Short bullet points.`
       : `Here are the most recent messages for context:\n\n${recent}\n\nQuestion: ${prompt}`;
 
+  // A pasted screenshot rides along with the question. The image goes first —
+  // Claude reads a leading image as the subject of the text that follows.
+  const IMAGE_TYPES = ["image/png", "image/jpeg", "image/gif", "image/webp"];
+  const turn: Anthropic.MessageParam =
+    body.image && IMAGE_TYPES.includes(body.image.mime)
+      ? {
+          role: "user",
+          content: [
+            {
+              type: "image",
+              source: {
+                type: "base64",
+                media_type: body.image.mime as "image/png",
+                data: body.image.data,
+              },
+            },
+            { type: "text", text: task },
+          ],
+        }
+      : { role: "user", content: task };
+
   try {
     const stream = streamClaude({
       system,
-      messages: [...history, { role: "user", content: task }],
+      messages: [...history, turn],
       tools: [search],
       maxTokens: 2000,
       signal: req.signal,

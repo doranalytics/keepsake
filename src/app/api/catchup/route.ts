@@ -15,7 +15,12 @@ export const maxDuration = 300;
 
 export async function GET(req: NextRequest) {
   const threadId = req.nextUrl.searchParams.get("threadId");
-  if (!threadId) return NextResponse.json({ error: "threadId required" }, { status: 400 });
+  // No threadId → every caught-up thread, so the sidebar can badge them.
+  if (!threadId) {
+    if (isDemo) return NextResponse.json({ threads: [] });
+    const { caughtUpThreads } = await import("@/lib/embeddings");
+    return NextResponse.json({ threads: caughtUpThreads() });
+  }
   if (isDemo) return NextResponse.json({ caughtUp: false, available: false, count: 0 });
   const { isCaughtUp } = await import("@/lib/embeddings");
   return NextResponse.json({

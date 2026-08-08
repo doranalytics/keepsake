@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Search, RefreshCw, Settings, X } from "lucide-react";
+import { BookOpenCheck, Search, RefreshCw, Settings, X } from "lucide-react";
 import type { AppStatus, SearchResult, Thread } from "@/lib/types";
 import { formatListDate } from "@/lib/format";
 import { AvatarBadge } from "@/components/avatar-badge";
@@ -41,6 +41,7 @@ export function ThreadList({
   onSync,
   onSelect,
   onOpenSettings,
+  caughtUp,
 }: {
   status: AppStatus | null;
   threads: Thread[];
@@ -50,6 +51,8 @@ export function ThreadList({
   onSync: () => void;
   onSelect: (threadId: string, messageId?: number) => void;
   onOpenSettings: () => void;
+  /** Threads that have been caught up on, so semantic search covers them. */
+  caughtUp?: Set<string>;
 }) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<SearchResult[] | null>(null);
@@ -180,7 +183,23 @@ export function ThreadList({
               <AvatarBadge name={t.name} isGroup={t.isGroup} />
               <div className="min-w-0 flex-1">
                 <div className="flex items-baseline justify-between gap-2">
-                  <span className="truncate text-[15px] font-semibold">{t.name}</span>
+                  <span className="flex min-w-0 items-baseline gap-1.5">
+                    <span className="truncate text-[15px] font-semibold">{t.name}</span>
+                    {caughtUp?.has(t.id) && (
+                      <span
+                        title="Sidenote has caught up on this conversation — questions search it by meaning too"
+                        className="flex shrink-0 self-center"
+                      >
+                        <BookOpenCheck
+                          aria-label="Caught up"
+                          className={cn(
+                            "size-3.5",
+                            activeId === t.id ? "text-white/80" : "text-[#0a84ff]"
+                          )}
+                        />
+                      </span>
+                    )}
+                  </span>
                   <span
                     className={cn(
                       "shrink-0 text-xs",

@@ -318,32 +318,15 @@ export function SettingsDialog({
             <p className="mt-1.5 text-[13px] leading-relaxed text-muted-foreground">
               {isDemo ? (
                 <>
-                  Once installed, Sidenote lives at{" "}
-                  <span className="font-medium text-foreground">
-                    localhost:4747
-                  </span>{" "}
-                  — bookmark it, or come back to sidenote.lol and click{" "}
-                  <span className="font-medium text-foreground">
-                    Open Sidenote
-                  </span>
-                  .
+                  Sidenote is a Mac app. Download it, drag it into{" "}
+                  <span className="font-medium text-foreground">Applications</span>, and open it
+                  like anything else — from Launchpad, Spotlight, or your Dock.
                 </>
               ) : (
                 <>
-                  Closed the window? Sidenote keeps running in the background —
-                  just open{" "}
-                  <span className="font-medium text-foreground">
-                    localhost:4747
-                  </span>{" "}
-                  in your browser (bookmark it). After a restart, visit{" "}
-                  <span className="font-medium text-foreground">
-                    sidenote.lol
-                  </span>{" "}
-                  and click{" "}
-                  <span className="font-medium text-foreground">
-                    Open Sidenote
-                  </span>{" "}
-                  — it&apos;ll get you back in.
+                  Closed the window? Sidenote is in your{" "}
+                  <span className="font-medium text-foreground">Applications</span> folder — open
+                  it from there, Spotlight, or the Dock, the same as any other Mac app.
                 </>
               )}
             </p>

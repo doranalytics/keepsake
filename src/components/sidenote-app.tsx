@@ -1,13 +1,19 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { ArrowUpCircle, MessageCircleHeart, RefreshCw, ShieldCheck } from "lucide-react";
+import {
+  ArrowUpCircle,
+  ChevronLeft,
+  MessageCircleHeart,
+  RefreshCw,
+  ShieldCheck,
+  X,
+} from "lucide-react";
 import type { AppStatus, Thread, UpdateInfo } from "@/lib/types";
 import { ThreadList } from "@/components/thread-list";
 import { ThreadView } from "@/components/thread-view";
 import { NotesPanel } from "@/components/notes-panel";
 import { AiPanel } from "@/components/ai-panel";
-import { LandingPage } from "@/components/landing-page";
 import { SettingsDialog } from "@/components/settings-dialog";
 import { FdaGuide } from "@/components/fda-guide";
 import { importLegacyNotes } from "@/lib/notes";
@@ -34,10 +40,14 @@ export function SidenoteApp() {
   const [active, setActive] = useState<{ threadId: string; messageId: number | null } | null>(null);
   const [panel, setPanel] = useState<"notes" | "ai">("notes");
   const [sheetOpen, setSheetOpen] = useState(false);
-  const [showLanding, setShowLanding] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [update, setUpdate] = useState<UpdateInfo | null>(null);
   const [updating, setUpdating] = useState(false);
+  // The sha whose update banner has been dismissed. A new release writes a
+  // different sha, so the banner returns once per version instead of nagging.
+  const [dismissed, setDismissed] = useState<string | null>(null);
+  // Which threads have been caught up on, for the sidebar badge.
+  const [caughtUp, setCaughtUp] = useState<Set<string>>(new Set());
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -48,9 +58,6 @@ export function SidenoteApp() {
       ]);
       setStatus(s);
       setThreads(t.threads ?? []);
-      if (s.mode === "demo" && !localStorage.getItem("keepsake-onboarded")) {
-        setShowLanding(true);
-      }
     } finally {
       setLoading(false);
     }
@@ -101,11 +108,30 @@ export function SidenoteApp() {
   // Check for a newer Sidenote once per app load (local installs only).
   useEffect(() => {
     if (status?.mode !== "local") return;
+    fetch("/api/catchup")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => d && setCaughtUp(new Set(d.threads ?? [])))
+      .catch(() => {});
+    fetch("/api/update/dismiss")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => d && setDismissed(d.dismissed))
+      .catch(() => {});
     fetch("/api/update")
       .then((r) => (r.ok ? r.json() : null))
       .then((u: UpdateInfo | null) => u && setUpdate(u))
       .catch(() => {});
   }, [status?.mode]);
+
+  // A thread finishing its catch-up badges immediately in the sidebar.
+  useEffect(() => {
+    const reload = () =>
+      fetch("/api/catchup")
+        .then((r) => (r.ok ? r.json() : null))
+        .then((d) => d && setCaughtUp(new Set(d.threads ?? [])))
+        .catch(() => {});
+    window.addEventListener("sidenote:caught-up", reload);
+    return () => window.removeEventListener("sidenote:caught-up", reload);
+  }, []);
 
   const checkForUpdate = async () => {
     const u = await fetch("/api/update?fresh=1")
@@ -184,17 +210,6 @@ export function SidenoteApp() {
     );
   }
 
-  if (status?.mode === "demo" && showLanding) {
-    return (
-      <LandingPage
-        onEnterDemo={() => {
-          localStorage.setItem("keepsake-onboarded", "1");
-          setShowLanding(false);
-        }}
-      />
-    );
-  }
-
   return (
     <div className="flex h-dvh overflow-hidden">
       {/* sidebar */}
@@ -206,32 +221,69 @@ export function SidenoteApp() {
       >
         <div className="flex h-full flex-col">
           {status?.mode === "demo" && (
-            <button
-              onClick={() => setShowLanding(true)}
-              className="shrink-0 bg-[#0a84ff] px-4 py-1.5 text-center text-[12px] font-medium text-white transition-colors hover:bg-[#0974df]"
+            <a
+              href="/"
+              className="flex shrink-0 items-center justify-center gap-1.5 bg-[#0a84ff] px-4 py-1.5 text-center text-[12px] font-medium text-white transition-colors hover:bg-[#0974df]"
             >
-              Sample data — get Sidenote for your own messages →
-            </button>
+              <ChevronLeft className="size-3.5" />
+              Back to Sidenote — this is sample data
+            </a>
           )}
-          {status?.mode === "local" && update?.updateAvailable && (
-            <button
-              onClick={applyUpdate}
-              disabled={updating}
-              className="flex shrink-0 items-center justify-center gap-1.5 bg-[#0a84ff] px-4 py-1.5 text-center text-[12px] font-medium text-white transition-colors hover:bg-[#0974df] disabled:opacity-80"
-            >
-              {updating ? (
-                <>
-                  <RefreshCw className="size-3.5 animate-spin" />
-                  Updating — Sidenote will reload itself…
-                </>
-              ) : (
-                <>
-                  <ArrowUpCircle className="size-3.5" />
-                  Update available{update.news[0] ? `: ${update.news[0].title}` : ""} — install now
-                </>
-              )}
-            </button>
-          )}
+          {status?.mode === "local" &&
+            update?.updateAvailable &&
+            update.latest !== dismissed && (
+              <div className="flex shrink-0 items-stretch bg-[#0a84ff] text-white">
+                {/* A .app install can't rewrite itself — that build ships as a
+                    new download — so the bar has to send you to the download
+                    page rather than pretending it can self-update. */}
+                {update.app ? (
+                  <a
+                    href="https://sidenote.lol"
+                    className="flex flex-1 items-center justify-center gap-1.5 px-4 py-1.5 text-center text-[12px] font-medium transition-colors hover:bg-[#0974df]"
+                  >
+                    <ArrowUpCircle className="size-3.5" />
+                    New version available
+                    {update.news[0] ? `: ${update.news[0].title}` : ""} — download
+                  </a>
+                ) : (
+                  <button
+                    onClick={applyUpdate}
+                    disabled={updating}
+                    className="flex flex-1 items-center justify-center gap-1.5 px-4 py-1.5 text-center text-[12px] font-medium transition-colors hover:bg-[#0974df] disabled:opacity-80"
+                  >
+                    {updating ? (
+                      <>
+                        <RefreshCw className="size-3.5 animate-spin" />
+                        Updating — Sidenote will reload itself…
+                      </>
+                    ) : (
+                      <>
+                        <ArrowUpCircle className="size-3.5" />
+                        Update available
+                        {update.news[0] ? `: ${update.news[0].title}` : ""} — install now
+                      </>
+                    )}
+                  </button>
+                )}
+                {!updating && (
+                  <button
+                    onClick={() => {
+                      setDismissed(update.latest);
+                      fetch("/api/update/dismiss", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ sha: update.latest }),
+                      }).catch(() => {});
+                    }}
+                    aria-label="Dismiss update notice"
+                    title="Dismiss until the next version"
+                    className="px-2.5 transition-colors hover:bg-[#0974df]"
+                  >
+                    <X className="size-3.5" />
+                  </button>
+                )}
+              </div>
+            )}
           {syncError && (
             <div className="shrink-0 bg-amber-100 px-4 py-2 text-[12px] leading-snug text-amber-900 dark:bg-amber-950 dark:text-amber-200">
               {syncError}
@@ -258,6 +310,7 @@ export function SidenoteApp() {
               onSync={sync}
               onSelect={select}
               onOpenSettings={() => setSettingsOpen(true)}
+            caughtUp={caughtUp}
             />
           </div>
         </div>

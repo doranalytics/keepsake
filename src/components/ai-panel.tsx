@@ -10,6 +10,7 @@ import {
   Pencil,
   Send,
   Sparkles,
+  X,
   Trash2,
 } from "lucide-react";
 import type { AppStatus } from "@/lib/types";
@@ -27,6 +28,27 @@ import { cn } from "@/lib/utils";
 
 type Entry = { role: "user" | "ai"; text: string };
 type CatchUp = { caughtUp: boolean; available: boolean; count: number };
+type Pasted = { data: string; mime: string; url: string };
+
+// Screenshots off a Retina display are routinely 3-5 MB, which is at or over
+// what the API accepts and costs far more tokens than it needs to. Shrink the
+// long edge to 1568px first — the point past which extra pixels stop buying
+// any accuracy — and re-encode as JPEG.
+const MAX_EDGE = 1568;
+
+async function shrink(file: File): Promise<Pasted> {
+  const bitmap = await createImageBitmap(file);
+  const scale = Math.min(1, MAX_EDGE / Math.max(bitmap.width, bitmap.height));
+  const w = Math.round(bitmap.width * scale);
+  const h = Math.round(bitmap.height * scale);
+  const canvas = document.createElement("canvas");
+  canvas.width = w;
+  canvas.height = h;
+  canvas.getContext("2d")!.drawImage(bitmap, 0, 0, w, h);
+  bitmap.close();
+  const url = canvas.toDataURL("image/jpeg", 0.85);
+  return { data: url.split(",")[1], mime: "image/jpeg", url };
+}
 
 export function AiPanel({
   threadId,
@@ -48,6 +70,7 @@ export function AiPanel({
   const [pickerOpen, setPickerOpen] = useState(false);
   const [catchUp, setCatchUp] = useState<CatchUp | null>(null);
   const [reading, setReading] = useState<{ done: number; total: number } | null>(null);
+  const [image, setImage] = useState<Pasted | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -63,6 +86,7 @@ export function AiPanel({
     setCurrentId(null);
     setPickerOpen(false);
     setReading(null);
+    setImage(null);
     (async () => {
       try {
         const list = await listConversations(threadId);
@@ -184,6 +208,8 @@ export function AiPanel({
         }
       }
       setCatchUp((c) => (c ? { ...c, caughtUp: true } : c));
+      // Tell the sidebar so its badge appears without a reload.
+      window.dispatchEvent(new Event("sidenote:caught-up"));
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -193,6 +219,8 @@ export function AiPanel({
 
   const run = async (mode: "summarize" | "ask", q?: string) => {
     if (busy) return;
+    const attached = image;
+    setImage(null);
     setError(null);
     setBusy(true);
 
@@ -226,7 +254,13 @@ export function AiPanel({
       const res = await fetch("/api/ai", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ threadId, mode, question: q, conversationId }),
+        body: JSON.stringify({
+          threadId,
+          mode,
+          question: q,
+          conversationId,
+          ...(attached ? { image: { data: attached.data, mime: attached.mime } } : {}),
+        }),
         signal: controller.signal,
       });
       if (!res.ok) {
@@ -446,14 +480,46 @@ export function AiPanel({
         )}
         {error && <p className="text-center text-[13px] text-red-500">{error}</p>}
       </div>
+      {image && (
+        <div className="flex shrink-0 items-center gap-2 border-t px-3 pt-2">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={image.url}
+            alt="Pasted screenshot"
+            className="h-12 w-auto rounded-lg border object-cover"
+          />
+          <span className="flex-1 text-[12px] text-muted-foreground">
+            Screenshot attached — ask about it below
+          </span>
+          <button
+            onClick={() => setImage(null)}
+            aria-label="Remove screenshot"
+            className="rounded p-1 text-muted-foreground hover:text-foreground"
+          >
+            <X className="size-3.5" />
+          </button>
+        </div>
+      )}
       <form
         className="flex shrink-0 items-center gap-2 border-t p-3"
+        onPaste={async (e) => {
+          const file = Array.from(e.clipboardData.files).find((f) =>
+            f.type.startsWith("image/")
+          );
+          if (!file) return; // plain text paste behaves normally
+          e.preventDefault();
+          try {
+            setImage(await shrink(file));
+          } catch {
+            setError("Couldn't read that image.");
+          }
+        }}
         onSubmit={(e) => {
           e.preventDefault();
           const q = question.trim();
-          if (!q) return;
+          if (!q && !image) return;
           setQuestion("");
-          run("ask", q);
+          run("ask", q || "What is this?");
         }}
       >
         <Input
@@ -477,7 +543,7 @@ export function AiPanel({
           <Button
             type="submit"
             size="icon"
-            disabled={!question.trim()}
+            disabled={!question.trim() && !image}
             className="rounded-full bg-[#0a84ff] hover:bg-[#0974df]"
             aria-label="Send"
           >

@@ -18,6 +18,9 @@ export const CHANGELOG: ChangelogEntry[] = [
       "Questions about a thread now search its entire history instead of the last few days",
       "“Catch up” on a conversation to make search find things by meaning, not just wording — runs on your Mac and stays current on its own",
       "AI now runs on Claude with your own Anthropic key (Settings › AI); the 17 GB local model is gone",
+      "Paste a screenshot into the AI chat and ask about it",
+      "sidenote.lol is the homepage again — the live demo has its own page, and Sidenote opens as a Mac app rather than a browser tab",
+      "The update banner can be dismissed, and points at the download when a new version ships",
     ],
   },
   {
@@ -83,9 +86,8 @@ export const CHANGELOG: ChangelogEntry[] = [
     title: "Way easier setup",
     points: [
       "Full Disk Access is now a guided two-step: flip one switch, click restart",
-      "Sidenote starts at login and keeps running — reopen it any time at localhost:4747",
-      "In-app Settings: pick your AI model, see sync status",
-      "“Open Sidenote” on the homepage when it's already installed",
+      "Sidenote starts at login and keeps running",
+      "In-app Settings, with sync status at a glance",
     ],
   },
 ];
