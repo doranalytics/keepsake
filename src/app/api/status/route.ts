@@ -1,13 +1,13 @@
 import { NextResponse } from "next/server";
 import { getStatus, isDemo } from "@/lib/store";
-import { hasApiKey } from "@/lib/claude";
+import { aiAvailable } from "@/lib/claude";
 
 export const dynamic = "force-dynamic";
 
 export async function GET() {
   const status = getStatus();
   if (!isDemo) {
-    status.ai = { configured: hasApiKey() };
+    status.ai = { configured: aiAvailable() };
     // In the Mac app it's the bundle that appears in the Full Disk Access
     // list, not the engine binary inside it.
     status.engine = process.env.SIDENOTE_APP_PATH ?? process.execPath;

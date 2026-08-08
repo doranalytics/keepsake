@@ -226,23 +226,19 @@ export function SettingsDialog({
             {isDemo ? (
               <p className="mt-1.5 text-[13px] leading-relaxed text-muted-foreground">
                 This is the demo. On your Mac, right-click any message and
-                Sidenote explains it using the conversation around it — you
-                connect your own Anthropic key here.
+                Sidenote explains it using the conversation around it — no
+                setup, no API key needed.
               </p>
             ) : key?.configured ? (
               <>
                 <p className="mt-1.5 text-[13px] leading-relaxed text-muted-foreground">
-                  Connected{" "}
-                  <span className="font-mono text-[12px] text-foreground">
-                    {key.hint}
-                  </span>
-                  . Explaining a message costs a fraction of a cent. Searching
-                  the web costs about a cent, and only happens when you tap it.
+                  Using your own Anthropic key{" "}
+                  <span className="font-mono text-[12px] text-foreground">{key.hint}</span>, so
+                  requests go straight to Anthropic and are billed to you.
                 </p>
                 {key.fromEnv ? (
                   <p className="mt-2.5 text-[12px] text-muted-foreground">
-                    Set by ANTHROPIC_API_KEY in the environment, so it can&apos;t
-                    be removed from here.
+                    Set by ANTHROPIC_API_KEY in the environment, so it can&apos;t be removed here.
                   </p>
                 ) : (
                   <Button
@@ -252,57 +248,48 @@ export function SettingsDialog({
                     className="mt-3 h-8 rounded-lg text-[12.5px]"
                   >
                     <Trash2 className="mr-1.5 size-3.5" />
-                    Remove key
+                    Use Sidenote&apos;s AI instead
                   </Button>
                 )}
               </>
             ) : (
               <>
                 <p className="mt-1.5 text-[13px] leading-relaxed text-muted-foreground">
-                  Paste an Anthropic API key to turn on AI. Your messages stay
-                  on this Mac — only the few around the one you ask about are
-                  sent, and only when you ask.
+                  AI is built in — nothing to set up. Explaining a message sends only the few
+                  messages around it, and only when you ask. The rest of your archive never
+                  leaves this Mac.
                 </p>
-                <div className="mt-3 flex items-center gap-2">
-                  <Input
-                    type="password"
-                    value={draft}
-                    onChange={(e) => setDraft(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") saveKey();
-                    }}
-                    placeholder="sk-ant-…"
-                    autoComplete="off"
-                    spellCheck={false}
-                    className="h-9 flex-1 text-[13px]"
-                  />
-                  <Button
-                    size="sm"
-                    onClick={saveKey}
-                    disabled={saving || !draft.trim()}
-                    className="h-9 shrink-0 rounded-lg bg-[#0a84ff] text-[12.5px] hover:bg-[#0974df]"
-                  >
-                    {saving ? (
-                      <RefreshCw className="size-3.5 animate-spin" />
-                    ) : (
-                      "Connect"
-                    )}
-                  </Button>
-                </div>
-                <Button
-                  asChild
-                  size="sm"
-                  variant="ghost"
-                  className="mt-2 h-7 rounded-lg px-2 text-[12px] text-muted-foreground"
-                >
-                  <a
-                    href="https://console.anthropic.com/settings/keys"
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    Get a key from Anthropic <ExternalLink className="ml-1 size-3" />
-                  </a>
-                </Button>
+                <details className="group mt-3">
+                  <summary className="cursor-pointer list-none text-[12.5px] text-muted-foreground hover:text-foreground">
+                    Use your own Anthropic key instead ›
+                  </summary>
+                  <p className="mt-2 text-[12px] leading-relaxed text-muted-foreground">
+                    Sends requests straight to Anthropic on your own account, bypassing
+                    Sidenote&apos;s shared limits.
+                  </p>
+                  <div className="mt-2.5 flex items-center gap-2">
+                    <Input
+                      type="password"
+                      value={draft}
+                      onChange={(e) => setDraft(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") saveKey();
+                      }}
+                      placeholder="sk-ant-…"
+                      autoComplete="off"
+                      spellCheck={false}
+                      className="h-9 flex-1 text-[13px]"
+                    />
+                    <Button
+                      size="sm"
+                      onClick={saveKey}
+                      disabled={saving || !draft.trim()}
+                      className="h-9 shrink-0 rounded-lg bg-[#0a84ff] text-[12.5px] hover:bg-[#0974df]"
+                    >
+                      {saving ? <RefreshCw className="size-3.5 animate-spin" /> : "Use it"}
+                    </Button>
+                  </div>
+                </details>
               </>
             )}
             {keyError && (

@@ -10,6 +10,16 @@ export const MODEL = "claude-haiku-4-5";
 
 const KEY_SETTING = "anthropic_api_key";
 
+// Where AI calls go when the user hasn't supplied their own key: a relay on
+// sidenote.lol that adds the operator's Anthropic key server-side. The SDK
+// speaks to it exactly as it would to Anthropic, so the tool loop is unchanged
+// — and tools still run here, on this Mac. Only the model call leaves.
+const RELAY = process.env.SIDENOTE_RELAY ?? "https://sidenote.lol/api/anthropic";
+
+// Ships inside a downloadable app, so this is a speed bump against casual
+// abuse of the relay, not a secret. Real protection needs per-install accounts.
+const CLIENT_TOKEN = process.env.SIDENOTE_CLIENT_SECRET ?? "sidenote-app";
+
 // The key lives in the vault so it survives app updates and re-syncs. Reading
 // it through one accessor is what makes a hosted/credits proxy a later swap
 // rather than a rewrite — only this function has to change.
@@ -21,21 +31,25 @@ export function setApiKey(key: string | null): void {
   setSetting(KEY_SETTING, key ? key.trim() : null);
 }
 
-export function hasApiKey(): boolean {
+/** Whether the user supplied their own key, in which case we skip the relay. */
+export function hasOwnKey(): boolean {
   return !!getApiKey();
 }
 
-export class MissingKeyError extends Error {
-  constructor() {
-    super("Add your Anthropic API key in Settings to use AI.");
-    this.name = "MissingKeyError";
-  }
+/** AI works out of the box through the relay; a personal key just bypasses it. */
+export function aiAvailable(): boolean {
+  return true;
 }
 
 function client(): Anthropic {
   const apiKey = getApiKey();
-  if (!apiKey) throw new MissingKeyError();
-  return new Anthropic({ apiKey });
+  // A personal key talks to Anthropic directly — no relay, no shared limits.
+  if (apiKey) return new Anthropic({ apiKey });
+  return new Anthropic({
+    apiKey: "relay", // the relay supplies the real one; the SDK needs a value
+    baseURL: RELAY,
+    defaultHeaders: { "x-sidenote-client": CLIENT_TOKEN },
+  });
 }
 
 export type ToolSpec = {
@@ -164,10 +178,14 @@ export function streamClaude(opts: RunOptions): ReadableStream<Uint8Array> {
 // Anthropic's raw messages leak model ids and status codes into a popover that
 // is three sentences tall. Say the thing the user can act on instead.
 export function friendlyError(e: Error): string {
-  if (e.name === "MissingKeyError") return e.message;
   const status = (e as { status?: number }).status;
-  if (status === 401) return "That API key was rejected. Check it in Settings.";
-  if (status === 429) return "Rate limited by Anthropic — try again in a moment.";
+  if (status === 401) {
+    return getApiKey()
+      ? "That API key was rejected. Check it in Settings."
+      : "Sidenote couldn't authorise this request.";
+  }
+  if (status === 503) return "Sidenote's AI service is unavailable right now.";
+  if (status === 429) return "Too many requests — give it a moment.";
   if (status === 400 && /credit|balance/i.test(e.message)) {
     return "Your Anthropic account is out of credit.";
   }

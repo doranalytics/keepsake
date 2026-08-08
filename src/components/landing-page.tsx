@@ -187,6 +187,16 @@ export function LandingPage() {
         <div className="mt-16 grid gap-x-8 gap-y-12 pb-16 text-left md:mt-24 md:grid-cols-2">
           {[
             {
+              img: "/shot-explain.png",
+              title: "Ask what a message means",
+              sub: "Right-click any text and Sidenote decodes it — slang, references, tone, in-jokes — using the conversation around it. The answer opens on the message, with a box for follow-ups.",
+            },
+            {
+              img: "/shot-explain-menu.png",
+              title: "Look it up, or draft the reply",
+              sub: "“Look this up” identifies a name, band, place, or event, searching the web and your own history. “Help me reply” drafts a response that sounds like you.",
+            },
+            {
               img: "/shot-search.png",
               title: "Search everything",
               sub: "Instant full-text search across every conversation you've ever had. Click a result to jump to that exact moment.",

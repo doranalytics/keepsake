@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getRecentText, getThread, isDemo, searchThread } from "@/lib/store";
-import { friendlyError, hasApiKey, streamClaude, type ToolSpec } from "@/lib/claude";
+import { friendlyError, streamClaude, type ToolSpec } from "@/lib/claude";
 import { appendExchange, getConversationMessages } from "@/lib/vault";
 import type Anthropic from "@anthropic-ai/sdk";
 
@@ -15,12 +15,6 @@ export async function POST(req: NextRequest) {
           "AI runs when Sidenote is installed on your Mac, reading your own messages.",
       },
       { status: 400 }
-    );
-  }
-  if (!hasApiKey()) {
-    return NextResponse.json(
-      { error: "Add your Anthropic API key in Settings to use AI." },
-      { status: 402 }
     );
   }
   const body = (await req.json()) as {

@@ -74,7 +74,6 @@ export function AiPanel({
   status: AppStatus | null;
 }) {
   const demo = status?.mode === "demo";
-  const configured = !!status?.ai?.configured;
   const [entries, setEntries] = useState<Entry[]>([]);
   const [question, setQuestion] = useState("");
   const [busy, setBusy] = useState(false);
@@ -363,16 +362,6 @@ export function AiPanel({
       <SetupShell
         title="Ask about any conversation"
         body="On your Mac, Sidenote answers questions about a thread by searching its whole history — years of it — and right-clicking any message explains what it means."
-      />
-    );
-  }
-
-  // ---------- no key yet ----------
-  if (!configured) {
-    return (
-      <SetupShell
-        title="Connect AI"
-        body="Add your Anthropic API key in Settings and Sidenote can explain confusing messages and answer questions about this conversation's whole history."
       />
     );
   }

@@ -461,6 +461,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         env["HOSTNAME"] = "127.0.0.1"
         env["NODE_ENV"] = "production"
         env["SIDENOTE_APP"] = "1"
+        // Identifies this app to the AI relay on sidenote.lol. It ships inside a
+        // downloadable binary, so it is a speed bump against casual abuse — the
+        // relay's rate limit is what actually bounds the damage.
+        env["SIDENOTE_CLIENT_SECRET"] = "sn_9b9e9cbecf3af566bc479abdc60259e7"
         // The bundle is what macOS lists under Full Disk Access — the UI needs
         // its real path, not the node binary buried inside it.
         env["SIDENOTE_APP_PATH"] = trueBundleURL.path
