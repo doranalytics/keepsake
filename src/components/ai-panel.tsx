@@ -6,6 +6,7 @@ import {
   Check,
   ChevronDown,
   CircleStop,
+  ImagePlus,
   MessageSquarePlus,
   Pencil,
   Send,
@@ -35,6 +36,19 @@ type Pasted = { data: string; mime: string; url: string };
 // long edge to 1568px first — the point past which extra pixels stop buying
 // any accuracy — and re-encode as JPEG.
 const MAX_EDGE = 1568;
+
+function imageFromClipboard(dt: DataTransfer | null): File | null {
+  if (!dt) return null;
+  // WebKit surfaces a pasted screenshot through items; Chromium fills files.
+  // Check both rather than assuming either.
+  for (const item of Array.from(dt.items ?? [])) {
+    if (item.kind === "file" && item.type.startsWith("image/")) {
+      const f = item.getAsFile();
+      if (f) return f;
+    }
+  }
+  return Array.from(dt.files ?? []).find((f) => f.type.startsWith("image/")) ?? null;
+}
 
 async function shrink(file: File): Promise<Pasted> {
   const bitmap = await createImageBitmap(file);
@@ -216,6 +230,57 @@ export function AiPanel({
       setReading(null);
     }
   };
+
+  const attach = useCallback(async (file: File | null) => {
+    if (!file) return;
+    try {
+      setImage(await shrink(file));
+    } catch {
+      setError("Couldn't read that image.");
+    }
+  }, []);
+
+  // Paste anywhere in this panel, not just inside the text box — a screenshot
+  // is usually taken with the app unfocused, so requiring focus in one input
+  // made Cmd-V look broken.
+  useEffect(() => {
+    if (demo) return;
+    type Bridge = { postMessage: (v: unknown) => void };
+    const shell = (
+      window as unknown as {
+        webkit?: { messageHandlers?: { clipboardImage?: Bridge } };
+        __sidenoteClipboardImage?: (dataUrl: string | null) => void;
+      }
+    );
+
+    // The native shell answers here with a data URL, or null if the pasteboard
+    // held no image after all.
+    shell.__sidenoteClipboardImage = (dataUrl) => {
+      if (!dataUrl) return;
+      fetch(dataUrl)
+        .then((r) => r.blob())
+        .then((b) => attach(new File([b], "screenshot.png", { type: b.type })))
+        .catch(() => setError("Couldn't read that image."));
+    };
+
+    const onPaste = (e: ClipboardEvent) => {
+      const file = imageFromClipboard(e.clipboardData);
+      if (file) {
+        e.preventDefault();
+        void attach(file);
+        return;
+      }
+      // No image in the event. In WKWebView that's expected when focus sits in
+      // a plain text field, so ask the shell to read NSPasteboard directly.
+      // Don't preventDefault — a normal text paste has to keep working.
+      shell.webkit?.messageHandlers?.clipboardImage?.postMessage(null);
+    };
+    document.addEventListener("paste", onPaste);
+    return () => {
+      document.removeEventListener("paste", onPaste);
+      delete shell.__sidenoteClipboardImage;
+    };
+  }, [attach, demo]);
 
   const run = async (mode: "summarize" | "ask", q?: string) => {
     if (busy) return;
@@ -502,18 +567,6 @@ export function AiPanel({
       )}
       <form
         className="flex shrink-0 items-center gap-2 border-t p-3"
-        onPaste={async (e) => {
-          const file = Array.from(e.clipboardData.files).find((f) =>
-            f.type.startsWith("image/")
-          );
-          if (!file) return; // plain text paste behaves normally
-          e.preventDefault();
-          try {
-            setImage(await shrink(file));
-          } catch {
-            setError("Couldn't read that image.");
-          }
-        }}
         onSubmit={(e) => {
           e.preventDefault();
           const q = question.trim();
@@ -522,6 +575,21 @@ export function AiPanel({
           run("ask", q || "What is this?");
         }}
       >
+        <label
+          title="Attach a screenshot"
+          className="flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-full text-muted-foreground hover:bg-black/[0.05] hover:text-foreground dark:hover:bg-white/10"
+        >
+          <ImagePlus className="size-4" />
+          <input
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={(e) => {
+              void attach(e.target.files?.[0] ?? null);
+              e.target.value = "";
+            }}
+          />
+        </label>
         <Input
           value={question}
           onChange={(e) => setQuestion(e.target.value)}

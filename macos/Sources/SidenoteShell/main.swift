@@ -40,7 +40,8 @@ func spawnDetached(_ command: String) -> Bool {
     return rc == 0
 }
 
-final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDelegate, WKDownloadDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDelegate,
+                          WKDownloadDelegate, WKScriptMessageHandler {
     static let logURL: URL = {
         let dir = FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent("Library/Logs")
@@ -320,6 +321,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         let config = WKWebViewConfiguration()
         config.websiteDataStore = .default()
         config.preferences.isElementFullscreenEnabled = true
+        // WebKit won't hand a pasted screenshot to a plain text input through
+        // clipboardData, so Cmd-V looked broken in the AI chat. The page asks
+        // us for it instead and we read NSPasteboard directly.
+        config.userContentController.add(self, name: "clipboardImage")
         webView = WKWebView(frame: .zero, configuration: config)
         webView.navigationDelegate = self
         webView.uiDelegate = self
@@ -641,6 +646,33 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
     }
 
     // MARK: - Menu
+
+    // MARK: - Clipboard bridge
+
+    /// The page calls this when a paste arrived without an image attached.
+    /// Reads the screenshot straight off NSPasteboard and hands it back as a
+    /// data URL, which is the only path that works reliably in WKWebView.
+    func userContentController(_ controller: WKUserContentController,
+                               didReceive message: WKScriptMessage) {
+        guard message.name == "clipboardImage" else { return }
+        let board = NSPasteboard.general
+        var png: Data?
+        if let data = board.data(forType: .png) {
+            png = data
+        } else if let tiff = board.data(forType: .tiff),
+                  let rep = NSBitmapImageRep(data: tiff) {
+            png = rep.representation(using: .png, properties: [:])
+        }
+        guard let png else {
+            webView.evaluateJavaScript("window.__sidenoteClipboardImage&&window.__sidenoteClipboardImage(null)")
+            return
+        }
+        let url = "data:image/png;base64," + png.base64EncodedString()
+        let escaped = url.replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "\"", with: "\\\"")
+        webView.evaluateJavaScript(
+            "window.__sidenoteClipboardImage&&window.__sidenoteClipboardImage(\"\(escaped)\")")
+    }
 
     func buildMenu() {
         let main = NSMenu()
