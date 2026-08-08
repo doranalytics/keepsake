@@ -35,24 +35,24 @@ console.log("ok: hero privacy line corrected");
 await page.screenshot({ path: "verify/reshot-landing.png", fullPage: false });
 
 // ---------- 2. demo app: right-click a message ----------
-await page.goto(`${URL}/app`, { waitUntil: "networkidle" }).catch(() => {});
-if (!page.url().includes("/app")) {
-  // The demo may live on the root behind a "Browse the demo" affordance.
-  await page.goto(URL, { waitUntil: "networkidle" });
-  const browse = page.locator('a:has-text("Browse the demo"), button:has-text("Browse the demo")').first();
-  if (await browse.count()) await browse.click();
-}
-await page.waitForTimeout(2500);
+// The demo is entered from the landing page, not a URL — clicking through is
+// also what a real visitor does.
+await page.getByRole("button", { name: /Browse the demo/ }).click();
+await page.waitForTimeout(2000);
 
-// Open the first conversation, then right-click the first message bubble.
-const thread = page.locator('[class*="cursor"], button').filter({ hasText: /Maya|Mom|Jake|Sarah/ }).first();
-if (await thread.count()) await thread.click().catch(() => {});
-await page.waitForTimeout(1500);
+// Open the first conversation, then right-click an actual message bubble.
+// The context-menu handler is on the inner bubble, not the [data-mid] wrapper.
+const row = page.locator("button, [role=button], li, a").filter({ hasText: /\d{1,2}:\d{2}\s?(AM|PM)|Yesterday/ }).first();
+if (await row.count()) await row.click();
+await page.waitForSelector("[data-mid]", { timeout: 20000 }).catch(() => {});
 
-const bubble = page.locator("[data-mid]").first();
-if (!(await bubble.count())) fail("no message bubbles rendered in the demo");
-await bubble.click({ button: "right" });
-await page.waitForTimeout(600);
+const bubbles = page.locator("[data-mid] .whitespace-pre-wrap");
+const count = await bubbles.count();
+if (!count) fail("no message bubbles rendered in the demo");
+const target = bubbles.nth(Math.max(0, count - 4));
+await target.scrollIntoViewIfNeeded();
+await target.click({ button: "right" });
+await page.waitForTimeout(700);
 
 for (const item of ["Explain this", "Look this up", "Help me reply"]) {
   if (!(await page.locator(`text=${item}`).count())) fail(`context menu is missing "${item}"`);
@@ -60,10 +60,8 @@ for (const item of ["Explain this", "Look this up", "Help me reply"]) {
 console.log("ok: right-click menu has Explain this / Look this up / Help me reply");
 
 await page.locator("text=Explain this").first().click();
-await page.waitForTimeout(1200);
-if (!(await page.locator("text=What this means").count())) {
-  fail("Explain popover did not open");
-}
+await page.waitForTimeout(1500);
+if (!(await page.locator("text=What this means").count())) fail("Explain popover did not open");
 console.log("ok: Explain popover opens on the message");
 
 await page.screenshot({ path: "verify/reshot.png", fullPage: false });
