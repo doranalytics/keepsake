@@ -152,9 +152,13 @@ export function ExplainPopover({
     setTimeout(() => setCopied(false), 1400);
   };
 
-  // Keep the card fully on screen even when the message is near an edge.
+  // Keep the card fully on screen. This has to account for the card's real
+  // maximum height, not a guess: the messages people right-click are usually
+  // the recent ones at the bottom of the thread, so clamping too low clips the
+  // follow-up box off the bottom of the window exactly when it's most used.
+  const maxHeight = Math.min(420, window.innerHeight * 0.7);
   const left = Math.max(8, Math.min(x, window.innerWidth - WIDTH - 8));
-  const top = Math.max(8, Math.min(y, window.innerHeight - 280));
+  const top = Math.max(8, Math.min(y, window.innerHeight - maxHeight - 12));
 
   return (
     <>
