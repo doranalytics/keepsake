@@ -17,7 +17,10 @@ await page.goto(URL, { waitUntil: "networkidle" });
 await page.waitForSelector("text=Every text.", { timeout: 20000 });
 
 const html = await page.content();
-for (const stale of ["Ollama", "ollama pull", "100% local", "Runs 100% locally"]) {
+// The bare word "Ollama" is allowed: past changelog entries are a record and
+// legitimately name it. What must be gone is any present-tense claim or
+// instruction — those are what became false when Claude entered the loop.
+for (const stale of ["ollama pull", "100% local", "Runs 100% locally", "runs 100% on your Mac"]) {
   if (html.includes(stale)) fail(`landing still says "${stale}"`);
 }
 if (!html.includes("Explain this")) fail("landing never mentions Explain this");

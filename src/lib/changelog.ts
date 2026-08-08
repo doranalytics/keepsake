@@ -36,7 +36,7 @@ export const CHANGELOG: ChangelogEntry[] = [
     points: [
       "Download it from sidenote.lol, drag it into Applications, done — no Terminal, no installer command",
       "Signed and notarized by Apple's checks, with its own window, Dock icon, and ⌘-Tab presence",
-      "Everything still runs 100% on your Mac, including AI through your local Ollama model",
+      "At the time, everything ran on your Mac including AI, through a local Ollama model — replaced on Aug 8, 2026",
       "Already installed the Terminal way? The app takes over seamlessly — your synced messages stay put",
     ],
   },
