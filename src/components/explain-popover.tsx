@@ -19,6 +19,18 @@ type Turn = { role: "user" | "ai"; text: string };
 
 const WIDTH = 340;
 
+// What the demo shows instead of calling the API. The demo has no key and only
+// fictional messages, so a canned line that describes the feature is more
+// honest than a red error — and more useful than hiding the menu entirely.
+const DEMO_COPY: Record<ExplainMode, string> = {
+  explain:
+    "On your Mac, this reads the messages around this one and explains what it means — slang, references, tone, in-jokes — so you never have to paste a text into another app to work out what someone meant.",
+  lookup:
+    "On your Mac, this identifies the people, places, bands, and events in a message, searching both the web and your own history for earlier mentions.",
+  reply:
+    "On your Mac, this drafts a reply in your voice, matching how you actually write to this person.",
+};
+
 // A small card anchored to the bubble you right-clicked. It exists because the
 // alternative — copy the message, switch to another app, paste, come back — is
 // the exact friction this feature was asked for. Follow-ups stay in the card so
@@ -30,6 +42,7 @@ export function ExplainPopover({
   mode,
   x,
   y,
+  demo,
   onClose,
   onOpenPanel,
 }: {
@@ -38,6 +51,7 @@ export function ExplainPopover({
   mode: ExplainMode;
   x: number;
   y: number;
+  demo?: boolean;
   onClose: () => void;
   onOpenPanel: () => void;
 }) {
@@ -52,6 +66,10 @@ export function ExplainPopover({
   const startedRef = useRef(false);
 
   const ask = async (opts: { question?: string; web?: boolean; reset?: boolean } = {}) => {
+    if (demo) {
+      setTurns([{ role: "ai", text: DEMO_COPY[mode] }]);
+      return;
+    }
     abortRef.current?.abort();
     const controller = new AbortController();
     abortRef.current = controller;
@@ -188,7 +206,7 @@ export function ExplainPopover({
 
         <div className="shrink-0 border-t">
           {/* The one action that costs meaningfully more, so it's never automatic. */}
-          {!usedWeb && !busy && (
+          {!usedWeb && !busy && !demo && (
             <button
               onClick={() => {
                 setUsedWeb(true);
@@ -201,7 +219,7 @@ export function ExplainPopover({
             </button>
           )}
           <form
-            className="flex items-center gap-1.5 p-2"
+            className={cn("flex items-center gap-1.5 p-2", demo && "hidden")}
             onSubmit={(e) => {
               e.preventDefault();
               const q = followUp.trim();

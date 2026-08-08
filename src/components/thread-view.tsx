@@ -558,14 +558,13 @@ export function ThreadView({
         >
           {/* The reason this feature exists: stop copy-pasting a confusing
               text into another app just to find out what it means. */}
-          {!demo &&
-            (
-              [
-                { mode: "explain" as const, label: "Explain this", Icon: Sparkles },
-                { mode: "lookup" as const, label: "Look this up", Icon: Globe },
-                { mode: "reply" as const, label: "Help me reply", Icon: Reply },
-              ]
-            ).map(({ mode, label, Icon }) => (
+          {(
+            [
+              { mode: "explain" as const, label: "Explain this", Icon: Sparkles },
+              { mode: "lookup" as const, label: "Look this up", Icon: Globe },
+              { mode: "reply" as const, label: "Help me reply", Icon: Reply },
+            ]
+          ).map(({ mode, label, Icon }) => (
               <button
                 key={mode}
                 className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-[13.5px] hover:bg-black/[0.04] dark:hover:bg-white/[0.06]"
@@ -574,11 +573,11 @@ export function ThreadView({
                   setMenu(null);
                 }}
               >
-                <Icon className="size-4 text-[#0a84ff]" />
-                {label}
-              </button>
-            ))}
-          {!demo && <div className="my-1 border-t" />}
+              <Icon className="size-4 text-[#0a84ff]" />
+              {label}
+            </button>
+          ))}
+          <div className="my-1 border-t" />
           <button
             className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-[13.5px] hover:bg-black/[0.04] dark:hover:bg-white/[0.06]"
             onClick={async () => {
@@ -616,6 +615,7 @@ export function ThreadView({
           mode={explain.mode}
           x={explain.x}
           y={explain.y}
+          demo={demo}
           onClose={() => setExplain(null)}
           onOpenPanel={() => onOpenPanel("ai")}
         />
