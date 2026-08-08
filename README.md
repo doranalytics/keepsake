@@ -19,11 +19,19 @@ locally; a web server can't (and shouldn't) read your Messages database.
   your notes on that person; clicking it jumps back to its place in the thread.
 - **Export** — copy or download a plain-text transcript of any conversation
   (pick a time range), ready to paste into any AI.
-- **On-device AI** — summarize a thread or ask questions about it through
-  [Ollama](https://ollama.com), running a local model on your Mac. Sidenote
-  walks you through the setup in-app. No API keys, no cloud. Keep as many
-  separate AI chats per conversation as you like; they're saved and picked
-  back up where you left them.
+- **Explain this** — right-click any message and Sidenote decodes it: slang,
+  references, tone, in-jokes, using the conversation around it. The answer
+  appears in a popover on the message itself, with a follow-up box, so you
+  stop copying texts into another app to work out what someone meant. Also
+  **Look this up** (searches the web and your own history) and **Help me
+  reply** (drafts a response in your voice).
+- **Ask a thread** — questions search a conversation's entire history, not just
+  the recent window. Keep as many separate AI chats per conversation as you
+  like; they're saved and picked back up where you left them.
+- **Catch up** — optionally embed one conversation so search finds things by
+  meaning, not just wording ("money" finding "can you venmo me"). Runs on your
+  Mac, takes about thirty seconds for a big thread, and stays current on its
+  own. Nothing is embedded until you ask for it.
 - **Kept** — notes, pinned messages, and AI chats are written to
   `~/.sidenote/vault.db`, separate from the message index. They survive
   quitting, re-syncing, and updating the app.
@@ -45,16 +53,26 @@ Two permissions matter:
    Messages database. The app's setup screen has a button that opens the exact
    System Settings pane — macOS requires you to flip the toggle yourself. The
    grant goes to your terminal app on your Mac, never to any cloud service.
-2. **Ollama** (optional, for AI): the AI panel guides you through installing
-   Ollama and downloading a local model, with progress shown in-app.
+2. **An Anthropic API key** (optional, for AI): paste one into Settings › AI.
+   Explaining a message costs a fraction of a cent; searching the web costs
+   about a cent and only happens when you tap it. Without a key, everything
+   else — sync, search, notes, pins, export — works normally.
 
-Set `OLLAMA_MODEL` to pin a specific model, `OLLAMA_URL` if Ollama isn't on
-the default port.
+`ANTHROPIC_API_KEY` in the environment overrides the key stored in Settings.
 
 ## Privacy
 
-Sidenote is read-only over your Messages data and fully local: the message
-index lives in `~/.sidenote/index.db`, your notes, pinned messages, and AI
-chats live in `~/.sidenote/vault.db`, and AI inference runs on your machine
-via Ollama. Nothing is uploaded. The deployed demo contains only fictional
-sample data, and stores its throwaway notes in the browser.
+Sidenote is read-only over your Messages data. Your archive is indexed,
+searched, and embedded entirely on your Mac: the message index lives in
+`~/.sidenote/index.db`, semantic vectors in `~/.sidenote/vectors.db`, and your
+notes, pinned messages, and AI chats in `~/.sidenote/vault.db`.
+
+The one exception is AI, and it is opt-in and narrow. When you ask about a
+message, Sidenote sends that message and roughly forty around it to Anthropic
+to answer — nothing more, and only at the moment you ask. Tapping **Search the
+web** additionally sends the search terms Claude writes. Your API key is stored
+in the vault and never leaves your machine. With no key configured, no message
+ever goes anywhere.
+
+The deployed demo contains only fictional sample data and stores its throwaway
+notes in the browser.

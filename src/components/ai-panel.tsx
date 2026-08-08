@@ -2,19 +2,17 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
+  BookOpenCheck,
   Check,
   ChevronDown,
   CircleStop,
-  Download,
   MessageSquarePlus,
   Pencil,
-  RefreshCw,
   Send,
   Sparkles,
   Trash2,
 } from "lucide-react";
 import type { AppStatus } from "@/lib/types";
-import { onModelChange, resolveModel, saveModel } from "@/lib/model-pref";
 import {
   createConversation,
   deleteConversation as deleteConversationApi,
@@ -28,11 +26,7 @@ import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 
 type Entry = { role: "user" | "ai"; text: string };
-type Ollama = AppStatus["ollama"];
-
-const DEFAULT_PULL = "qwen3.6:27b";
-
-const gb = (bytes: number) => `${(bytes / 1e9).toFixed(0)} GB`;
+type CatchUp = { caughtUp: boolean; available: boolean; count: number };
 
 export function AiPanel({
   threadId,
@@ -44,17 +38,16 @@ export function AiPanel({
   status: AppStatus | null;
 }) {
   const demo = status?.mode === "demo";
-  const [ollama, setOllama] = useState<Ollama | null>(status?.ollama ?? null);
-  const [checking, setChecking] = useState(false);
+  const configured = !!status?.ai?.configured;
   const [entries, setEntries] = useState<Entry[]>([]);
   const [question, setQuestion] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [model, setModel] = useState<string | null>(null);
-  const [pull, setPull] = useState<{ pct: number; label: string } | null>(null);
   const [conversations, setConversations] = useState<AiConversation[]>([]);
   const [currentId, setCurrentId] = useState<string | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [catchUp, setCatchUp] = useState<CatchUp | null>(null);
+  const [reading, setReading] = useState<{ done: number; total: number } | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -69,37 +62,34 @@ export function AiPanel({
     setEntries([]);
     setCurrentId(null);
     setPickerOpen(false);
+    setReading(null);
     (async () => {
       try {
         const list = await listConversations(threadId);
         if (cancelled) return;
         setConversations(list);
-        if (!list.length) return;
-        const { messages } = await loadConversation(list[0].id);
-        if (cancelled) return;
-        setCurrentId(list[0].id);
-        setEntries(messages.map((m) => ({ role: m.role, text: m.text })));
+        if (list.length) {
+          const { messages } = await loadConversation(list[0].id);
+          if (cancelled) return;
+          setCurrentId(list[0].id);
+          setEntries(messages.map((m) => ({ role: m.role, text: m.text })));
+        }
       } catch (e) {
         if (!cancelled) setError((e as Error).message);
+      }
+      try {
+        const c = (await fetch(
+          `/api/catchup?threadId=${encodeURIComponent(threadId)}`
+        ).then((r) => r.json())) as CatchUp;
+        if (!cancelled) setCatchUp(c);
+      } catch {
+        // catching up is optional — questions still work without it
       }
     })();
     return () => {
       cancelled = true;
     };
   }, [threadId, demo]);
-
-  useEffect(() => {
-    if (status?.ollama) setOllama(status.ollama);
-  }, [status]);
-
-  // resolve the active model: user choice if still installed, else server
-  // default — and stay in sync when it changes in Settings
-  useEffect(() => {
-    if (!ollama) return;
-    const apply = () => setModel(resolveModel(ollama.models, ollama.model));
-    apply();
-    return onModelChange(apply);
-  }, [ollama]);
 
   useEffect(() => {
     const el = scrollRef.current;
@@ -150,37 +140,26 @@ export function AiPanel({
   const rename = async (id: string, title: string) => {
     try {
       await renameConversationApi(id, title);
-      setConversations((list) =>
-        list.map((c) => (c.id === id ? { ...c, title } : c))
-      );
+      setConversations((list) => list.map((c) => (c.id === id ? { ...c, title } : c)));
     } catch (e) {
       setError((e as Error).message);
     }
   };
 
-  const refresh = async () => {
-    setChecking(true);
-    try {
-      const s = (await fetch("/api/status").then((r) => r.json())) as AppStatus;
-      setOllama(s.ollama);
-    } finally {
-      setChecking(false);
-    }
-  };
-
-  const startPull = async () => {
+  // Embeds the thread so semantic search works on it. Opt-in and per thread:
+  // most people talk to a dozen people, not five hundred, and asking everyone
+  // to wait through the whole archive up front would be a tax on people who
+  // never ask a question.
+  const startCatchUp = async () => {
     setError(null);
-    setPull({ pct: 0, label: "Starting download…" });
+    setReading({ done: 0, total: catchUp?.count ?? 0 });
     try {
-      const res = await fetch("/api/ai/pull", {
+      const res = await fetch("/api/catchup", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ model: DEFAULT_PULL }),
+        body: JSON.stringify({ threadId }),
       });
-      if (!res.ok || !res.body) {
-        const data = await res.json().catch(() => null);
-        throw new Error(data?.error ?? "Download failed.");
-      }
+      if (!res.ok || !res.body) throw new Error("Couldn't start.");
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
       let buf = "";
@@ -192,32 +171,23 @@ export function AiPanel({
         buf = lines.pop() ?? "";
         for (const line of lines) {
           if (!line.trim()) continue;
-          try {
-            const j = JSON.parse(line) as {
-              status?: string;
-              total?: number;
-              completed?: number;
-              error?: string;
-            };
-            if (j.error) throw new Error(j.error);
-            if (j.total && j.completed !== undefined) {
-              setPull({
-                pct: Math.round((j.completed / j.total) * 100),
-                label: `Downloading — ${gb(j.completed)} of ${gb(j.total)}`,
-              });
-            } else if (j.status) {
-              setPull((p) => ({ pct: p?.pct ?? 0, label: j.status! }));
-            }
-          } catch (e) {
-            if ((e as Error).message !== "Unexpected end of JSON input") throw e;
+          const j = JSON.parse(line) as {
+            done?: number;
+            total?: number;
+            status?: string;
+            error?: string;
+          };
+          if (j.error) throw new Error(j.error);
+          if (j.done !== undefined && j.total !== undefined) {
+            setReading({ done: j.done, total: j.total });
           }
         }
       }
-      setPull(null);
-      await refresh();
+      setCatchUp((c) => (c ? { ...c, caughtUp: true } : c));
     } catch (e) {
-      setPull(null);
       setError((e as Error).message);
+    } finally {
+      setReading(null);
     }
   };
 
@@ -256,13 +226,7 @@ export function AiPanel({
       const res = await fetch("/api/ai", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          threadId,
-          mode,
-          question: q,
-          model: model ?? undefined,
-          conversationId,
-        }),
+        body: JSON.stringify({ threadId, mode, question: q, conversationId }),
         signal: controller.signal,
       });
       if (!res.ok) {
@@ -298,72 +262,19 @@ export function AiPanel({
   if (demo) {
     return (
       <SetupShell
-        title="On-device AI"
-        body="Summaries and thread Q&A run privately through Ollama when Sidenote runs on your Mac. Nothing ever leaves your computer."
+        title="Ask about any conversation"
+        body="On your Mac, Sidenote answers questions about a thread by searching its whole history — years of it — and right-clicking any message explains what it means."
       />
     );
   }
 
-  // ---------- ollama not running ----------
-  if (ollama && !ollama.running) {
+  // ---------- no key yet ----------
+  if (!configured) {
     return (
       <SetupShell
-        title="Turn on on-device AI"
-        body="Sidenote uses Ollama — a free app that runs AI models privately on your Mac. Install it, open it once, and come back."
-      >
-        <div className="flex flex-col items-center gap-2">
-          <Button
-            asChild
-            className="h-10 rounded-full bg-[#0a84ff] px-5 text-[13.5px] hover:bg-[#0974df]"
-          >
-            <a href="https://ollama.com/download" target="_blank" rel="noreferrer">
-              <Download className="mr-1.5 size-4" /> Download Ollama — free
-            </a>
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={refresh}
-            disabled={checking}
-            className="text-[13px] text-muted-foreground"
-          >
-            <RefreshCw className={cn("mr-1.5 size-3.5", checking && "animate-spin")} />
-            I&apos;ve installed it — check again
-          </Button>
-        </div>
-      </SetupShell>
-    );
-  }
-
-  // ---------- running, no model yet ----------
-  if (ollama && ollama.running && ollama.models.length === 0) {
-    return (
-      <SetupShell
-        title="Download the AI model"
-        body="One-time download of Qwen 3.6 (about 17 GB). It runs entirely on your Mac — after this, AI works offline."
-      >
-        {pull ? (
-          <div className="w-full max-w-[260px] space-y-2">
-            <div className="h-2 overflow-hidden rounded-full bg-black/[0.08] dark:bg-white/10">
-              <div
-                className="h-full rounded-full bg-[#0a84ff] transition-all duration-300"
-                style={{ width: `${pull.pct}%` }}
-              />
-            </div>
-            <p className="text-center text-[12px] text-muted-foreground">
-              {pull.label} {pull.pct > 0 && `· ${pull.pct}%`}
-            </p>
-          </div>
-        ) : (
-          <Button
-            onClick={startPull}
-            className="h-10 rounded-full bg-[#0a84ff] px-5 text-[13.5px] hover:bg-[#0974df]"
-          >
-            <Download className="mr-1.5 size-4" /> Download model
-          </Button>
-        )}
-        {error && <p className="text-center text-[12.5px] text-red-500">{error}</p>}
-      </SetupShell>
+        title="Connect AI"
+        body="Add your Anthropic API key in Settings and Sidenote can explain confusing messages and answer questions about this conversation's whole history."
+      />
     );
   }
 
@@ -437,29 +348,56 @@ export function AiPanel({
         )}
       </div>
 
-      {ollama && ollama.models.length > 1 && (
-        <div className="flex shrink-0 items-center gap-2 border-b px-4 py-2">
-          <span className="text-[11px] font-medium text-muted-foreground uppercase">Model</span>
-          <select
-            value={model ?? ""}
-            onChange={(e) => saveModel(e.target.value)}
-            className="h-7 flex-1 rounded-md border-none bg-black/[0.05] px-2 text-[12.5px] outline-none dark:bg-white/10"
-          >
-            {ollama.models.map((m) => (
-              <option key={m.name} value={m.name}>
-                {m.name} ({gb(m.size)})
-              </option>
-            ))}
-          </select>
+      {/* catch up */}
+      {catchUp?.available && !catchUp.caughtUp && (
+        <div className="shrink-0 border-b bg-black/[0.02] px-4 py-2.5 dark:bg-white/[0.03]">
+          {reading ? (
+            <>
+              <div className="h-1.5 overflow-hidden rounded-full bg-black/[0.08] dark:bg-white/10">
+                <div
+                  className="h-full rounded-full bg-[#0a84ff] transition-all duration-300"
+                  style={{
+                    width: `${reading.total ? Math.round((reading.done / reading.total) * 100) : 0}%`,
+                  }}
+                />
+              </div>
+              <p className="mt-1.5 text-[12px] text-muted-foreground">
+                Catching up… {reading.done.toLocaleString()} of{" "}
+                {reading.total.toLocaleString()} messages
+              </p>
+            </>
+          ) : (
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-[12px] leading-snug text-muted-foreground">
+                Catch up on this chat so questions can find things by meaning,
+                not just wording.
+              </p>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={startCatchUp}
+                className="h-7 shrink-0 rounded-lg text-[12px]"
+              >
+                Catch up
+              </Button>
+            </div>
+          )}
         </div>
       )}
+      {catchUp?.caughtUp && !reading && (
+        <div className="flex shrink-0 items-center gap-1.5 border-b px-4 py-1.5 text-[11.5px] text-muted-foreground">
+          <BookOpenCheck className="size-3.5 text-[#0a84ff]" />
+          Caught up on this conversation
+        </div>
+      )}
+
       <div ref={scrollRef} className="min-h-0 flex-1 space-y-3 overflow-y-auto p-4">
         {entries.length === 0 ? (
           <div className="pt-6 text-center">
             <p className="text-sm font-semibold">Ask about this thread</p>
             <p className="mx-auto mt-1 max-w-[30ch] text-[13px] text-muted-foreground">
-              Questions search this thread&apos;s entire history. Answers come from{" "}
-              {model ?? "your local model"}, on your Mac — nothing leaves your computer.
+              Questions search this conversation&apos;s entire history — every
+              message, however far back.
             </p>
             <Button
               size="sm"
@@ -487,7 +425,9 @@ export function AiPanel({
               <div
                 className={cn(
                   "max-w-[90%] rounded-2xl px-3.5 py-2 text-[13.5px] leading-relaxed whitespace-pre-wrap",
-                  e.role === "user" ? "bg-[#0a84ff] text-white" : "bg-black/[0.05] dark:bg-white/[0.08]"
+                  e.role === "user"
+                    ? "bg-[#0a84ff] text-white"
+                    : "bg-black/[0.05] dark:bg-white/[0.08]"
                 )}
               >
                 {e.text ||

@@ -376,7 +376,8 @@ function SetupScreen({
         <h1 className="mt-5 text-2xl font-bold tracking-tight">Welcome to Sidenote</h1>
         <p className="mt-2 text-[15px] leading-relaxed text-muted-foreground">
           Your iMessage companion. Sidenote copies your Messages history into a private local
-          index so you can actually find things — then layers on notes and on-device AI.
+          index so you can actually find things — then layers on notes, pins, and AI that
+          can explain any message you don't understand.
         </p>
         <ul className="mt-4 space-y-2 text-[13.5px] text-muted-foreground">
           <li className="flex gap-2">
@@ -415,7 +416,7 @@ function SetupScreen({
             First sync needs one macOS permission (
             <span className="font-medium text-foreground">Full Disk Access</span>
             ). If it&apos;s missing, Sidenote will walk you through granting it —
-            two steps, one time. Your messages never leave this computer.
+            two steps, one time. The grant is to Sidenote on this Mac, not to a server.
           </p>
         )}
       </div>

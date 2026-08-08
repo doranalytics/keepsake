@@ -12,9 +12,9 @@ const bg = `
   <text x="80" y="358" font-family="-apple-system, 'SF Pro Display', 'Helvetica Neue', Arial, sans-serif"
         font-size="72" font-weight="700" fill="#1d1d1f" letter-spacing="-2">Remembered.</text>
   <text x="80" y="432" font-family="-apple-system, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif"
-        font-size="26" fill="#6e6e73">Search, pin, and ask AI about your</text>
+        font-size="26" fill="#6e6e73">Search every text you&#8217;ve sent. Right-click</text>
   <text x="80" y="470" font-family="-apple-system, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif"
-        font-size="26" fill="#6e6e73">iMessage history — 100% on your Mac.</text>
+        font-size="26" fill="#6e6e73">any message to ask what it means.</text>
   <text x="80" y="552" font-family="-apple-system, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif"
         font-size="25" font-weight="600" fill="#0a84ff">sidenote.lol</text>
 </svg>`;

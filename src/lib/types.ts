@@ -37,10 +37,8 @@ export type AppStatus = {
   lastSync: number | null;
   threadCount: number;
   messageCount: number;
-  ollama: {
-    running: boolean;
-    model: string | null;
-    models: { name: string; size: number }[];
+  ai: {
+    configured: boolean; // an Anthropic API key is saved
   };
   engine?: string; // what macOS lists under Full Disk Access: the app bundle, or the node binary
   translocated?: boolean; // running from a temporary copy, where an FDA grant can't persist

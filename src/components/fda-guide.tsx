@@ -191,7 +191,8 @@ export function FdaGuide({
       <p className="mt-3 flex gap-1.5 text-[12px] leading-relaxed text-muted-foreground">
         <ShieldCheck className="mt-0.5 size-3.5 shrink-0 text-[#0a84ff]" />
         You&apos;re granting access to the engine on your Mac only — not to any
-        AI or cloud service. Your messages never leave this computer.
+        cloud service. Sidenote reads your Messages database here, on this
+        computer, and the index it builds stays here.
       </p>
     </div>
   );

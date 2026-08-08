@@ -73,6 +73,28 @@ function db(): Db {
   return open;
 }
 
+// ---------- settings ----------
+// Small key/value settings that must outlive an update. The Anthropic API key
+// lives here rather than in .env so it survives replacing Sidenote.app, and
+// rather than in index.db so it survives a re-sync.
+
+export function getSetting(key: string): string | null {
+  const row = db().prepare("SELECT value FROM meta WHERE key = ?").get(key) as
+    | { value: string }
+    | undefined;
+  return row?.value ?? null;
+}
+
+export function setSetting(key: string, value: string | null): void {
+  if (value === null || value === "") {
+    db().prepare("DELETE FROM meta WHERE key = ?").run(key);
+    return;
+  }
+  db()
+    .prepare("INSERT OR REPLACE INTO meta(key, value) VALUES (?, ?)")
+    .run(key, value);
+}
+
 // ---------- notes ----------
 
 export function getNote(threadId: string): string {

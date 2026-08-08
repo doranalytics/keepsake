@@ -606,6 +606,10 @@ export function runIncrementalSync(): number {
     );
 
     const touched = new Set<string>();
+    // New messages worth embedding, collected during the transaction and
+    // handled after it commits — embedding is async and must not hold a write
+    // lock open on the index.
+    const fresh: { id: number; text: string; threadId: string }[] = [];
     const apply = out.transaction(() => {
       for (const row of rows) {
         if (row.id > maxRowid) maxRowid = row.id;
@@ -640,7 +644,10 @@ export function runIncrementalSync(): number {
           text ?? "",
           row.is_from_me ? appleToUnixMs(row.date_read) : 0
         );
-        if (text) insertFts.run(row.id, text);
+        if (text) {
+          insertFts.run(row.id, text);
+          fresh.push({ id: row.id, text, threadId });
+        }
         for (const a of atts) {
           insertAtt.run(a.id, row.id, expandHome(a.filename!), attMime(a), attName(a));
         }
@@ -662,9 +669,26 @@ export function runIncrementalSync(): number {
       }
     });
     apply();
+    if (fresh.length) void embedFresh(fresh);
   } finally {
     src.close();
     out.close();
   }
   return added;
+}
+
+// Keep already-caught-up threads current as new texts arrive. Threads the user
+// never caught up on are skipped entirely, so for most people this does
+// nothing; for the handful they use, a tick is a few messages and takes
+// milliseconds. Fire-and-forget — a live tick must never wait on it.
+async function embedFresh(rows: { id: number; text: string; threadId: string }[]) {
+  try {
+    const { caughtUpThreads, embedNewMessages } = await import("./embeddings");
+    const active = new Set(caughtUpThreads());
+    if (!active.size) return;
+    const todo = rows.filter((r) => active.has(r.threadId));
+    if (todo.length) await embedNewMessages(todo);
+  } catch {
+    // Semantic search going stale is survivable; a broken sync is not.
+  }
 }

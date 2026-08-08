@@ -10,6 +10,17 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    date: "Aug 8, 2026",
+    title: "Right-click any message and ask what it means",
+    points: [
+      "“Explain this” decodes slang, references, and tone using the messages around it — the answer opens right on the bubble, with a follow-up box",
+      "“Look this up” identifies a name, band, place, or event; “Help me reply” drafts a response in your voice",
+      "Questions about a thread now search its entire history instead of the last few days",
+      "“Catch up” on a conversation to make search find things by meaning, not just wording — runs on your Mac and stays current on its own",
+      "AI now runs on Claude with your own Anthropic key (Settings › AI); the 17 GB local model is gone",
+    ],
+  },
+  {
     date: "Aug 6, 2026",
     title: "Full Disk Access setup that actually works",
     points: [

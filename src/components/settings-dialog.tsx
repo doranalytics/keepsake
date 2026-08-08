@@ -1,10 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ArrowUpCircle, Check, ExternalLink, RefreshCw, Sparkles } from "lucide-react";
+import { ArrowUpCircle, Check, ExternalLink, RefreshCw, Sparkles, Trash2 } from "lucide-react";
 import type { AppStatus, UpdateInfo } from "@/lib/types";
-import { resolveModel, saveModel } from "@/lib/model-pref";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   Dialog,
   DialogContent,
@@ -14,8 +14,6 @@ import {
 } from "@/components/ui/dialog";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
-
-const gb = (bytes: number) => `${(bytes / 1e9).toFixed(0)} GB`;
 
 function UpdatesSection({
   update,
@@ -159,35 +157,54 @@ export function SettingsDialog({
   onUpdate?: () => void;
   onCheckUpdate?: () => Promise<UpdateInfo | null>;
 }) {
-  const [ollama, setOllama] = useState<AppStatus["ollama"] | null>(
-    status?.ollama ?? null
-  );
-  const [model, setModel] = useState<string | null>(null);
-  const [checking, setChecking] = useState(false);
+  type KeyState = { configured: boolean; hint: string | null; fromEnv: boolean };
+  const [key, setKey] = useState<KeyState | null>(null);
+  const [draft, setDraft] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [keyError, setKeyError] = useState<string | null>(null);
 
-  const refresh = async () => {
-    setChecking(true);
+  const loadKey = async () => {
     try {
-      const s = (await fetch("/api/status").then((r) => r.json())) as AppStatus;
-      setOllama(s.ollama);
-    } finally {
-      setChecking(false);
+      setKey((await fetch("/api/ai/key").then((r) => r.json())) as KeyState);
+    } catch {
+      // offline or mid-restart — the section just shows the empty state
     }
   };
 
-  // Re-check Ollama every time the dialog opens so the model list is fresh.
   useEffect(() => {
-    if (open && status?.mode === "local") refresh();
+    if (open && status?.mode === "local") loadKey();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
-  useEffect(() => {
-    if (ollama) setModel(resolveModel(ollama.models, ollama.model));
-  }, [ollama]);
+  const saveKey = async () => {
+    const value = draft.trim();
+    if (!value) return;
+    setSaving(true);
+    setKeyError(null);
+    try {
+      const res = await fetch("/api/ai/key", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ key: value }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error ?? "Couldn't save that key.");
+      setKey(data as KeyState);
+      setDraft("");
+    } catch (e) {
+      setKeyError((e as Error).message);
+    } finally {
+      setSaving(false);
+    }
+  };
 
-  const pick = (name: string) => {
-    setModel(name);
-    saveModel(name);
+  const removeKey = async () => {
+    setKeyError(null);
+    try {
+      setKey((await fetch("/api/ai/key", { method: "DELETE" }).then((r) => r.json())) as KeyState);
+    } catch (e) {
+      setKeyError((e as Error).message);
+    }
   };
 
   const isDemo = status?.mode === "demo";
@@ -198,116 +215,98 @@ export function SettingsDialog({
         <DialogHeader className="border-b px-5 py-4">
           <DialogTitle className="text-[15px]">Settings</DialogTitle>
           <DialogDescription className="sr-only">
-            Choose the AI model and see app info.
+            Connect AI, and see app info.
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-5 px-5 py-5">
-          {/* ---------- AI model ---------- */}
+          {/* ---------- AI ---------- */}
           <section>
-            <h3 className="text-[13px] font-semibold">AI model</h3>
+            <h3 className="text-[13px] font-semibold">AI</h3>
             {isDemo ? (
               <p className="mt-1.5 text-[13px] leading-relaxed text-muted-foreground">
-                This is the demo. When Sidenote runs on your Mac, AI answers come
-                from a local model through Ollama, and you pick the model here.
+                This is the demo. On your Mac, right-click any message and
+                Sidenote explains it using the conversation around it — you
+                connect your own Anthropic key here.
               </p>
-            ) : !ollama || !ollama.running ? (
+            ) : key?.configured ? (
               <>
                 <p className="mt-1.5 text-[13px] leading-relaxed text-muted-foreground">
-                  Ollama isn&apos;t running, so on-device AI is off. Open the
-                  Ollama app (or install it — free) and check again.
+                  Connected{" "}
+                  <span className="font-mono text-[12px] text-foreground">
+                    {key.hint}
+                  </span>
+                  . Explaining a message costs a fraction of a cent. Searching
+                  the web costs about a cent, and only happens when you tap it.
                 </p>
-                <div className="mt-3 flex items-center gap-2">
+                {key.fromEnv ? (
+                  <p className="mt-2.5 text-[12px] text-muted-foreground">
+                    Set by ANTHROPIC_API_KEY in the environment, so it can&apos;t
+                    be removed from here.
+                  </p>
+                ) : (
                   <Button
-                    asChild
                     size="sm"
                     variant="outline"
-                    className="h-8 rounded-lg text-[12.5px]"
+                    onClick={removeKey}
+                    className="mt-3 h-8 rounded-lg text-[12.5px]"
                   >
-                    <a
-                      href="https://ollama.com/download"
-                      target="_blank"
-                      rel="noreferrer"
-                    >
-                      Get Ollama <ExternalLink className="ml-1 size-3" />
-                    </a>
+                    <Trash2 className="mr-1.5 size-3.5" />
+                    Remove key
                   </Button>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={refresh}
-                    disabled={checking}
-                    className="h-8 rounded-lg text-[12.5px] text-muted-foreground"
-                  >
-                    <RefreshCw
-                      className={cn("mr-1 size-3.5", checking && "animate-spin")}
-                    />
-                    Check again
-                  </Button>
-                </div>
+                )}
               </>
-            ) : ollama.models.length === 0 ? (
-              <p className="mt-1.5 text-[13px] leading-relaxed text-muted-foreground">
-                Ollama is running but has no models yet. Open{" "}
-                <span className="font-medium text-foreground">Ask AI</span> on any
-                conversation to download one, or run{" "}
-                <code className="rounded bg-black/[0.06] px-1 py-0.5 text-[12px] dark:bg-white/10">
-                  ollama pull qwen3.6:27b
-                </code>{" "}
-                in Terminal.
-              </p>
             ) : (
               <>
                 <p className="mt-1.5 text-[13px] leading-relaxed text-muted-foreground">
-                  Summaries and “Ask AI” answers use this model. Everything runs
-                  on your Mac.
+                  Paste an Anthropic API key to turn on AI. Your messages stay
+                  on this Mac — only the few around the one you ask about are
+                  sent, and only when you ask.
                 </p>
-                <div className="mt-3 overflow-hidden rounded-xl border">
-                  {ollama.models.map((m, i) => (
-                    <button
-                      key={m.name}
-                      onClick={() => pick(m.name)}
-                      className={cn(
-                        "flex w-full items-center justify-between gap-3 px-3.5 py-2.5 text-left transition-colors hover:bg-black/[0.03] dark:hover:bg-white/[0.05]",
-                        i > 0 && "border-t"
-                      )}
-                    >
-                      <span className="min-w-0">
-                        <span className="block truncate text-[13.5px] font-medium">
-                          {m.name}
-                        </span>
-                        <span className="text-[12px] text-muted-foreground">
-                          {gb(m.size)}
-                        </span>
-                      </span>
-                      {model === m.name && (
-                        <Check className="size-4 shrink-0 text-[#0a84ff]" />
-                      )}
-                    </button>
-                  ))}
-                </div>
-                <div className="mt-2.5 flex items-center justify-between gap-2">
-                  <p className="text-[12px] leading-relaxed text-muted-foreground">
-                    Want another model? Run{" "}
-                    <code className="rounded bg-black/[0.06] px-1 py-0.5 text-[11.5px] dark:bg-white/10">
-                      ollama pull &lt;name&gt;
-                    </code>{" "}
-                    in Terminal, then refresh.
-                  </p>
+                <div className="mt-3 flex items-center gap-2">
+                  <Input
+                    type="password"
+                    value={draft}
+                    onChange={(e) => setDraft(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") saveKey();
+                    }}
+                    placeholder="sk-ant-…"
+                    autoComplete="off"
+                    spellCheck={false}
+                    className="h-9 flex-1 text-[13px]"
+                  />
                   <Button
                     size="sm"
-                    variant="ghost"
-                    onClick={refresh}
-                    disabled={checking}
-                    aria-label="Refresh model list"
-                    className="h-7 shrink-0 rounded-lg px-2 text-muted-foreground"
+                    onClick={saveKey}
+                    disabled={saving || !draft.trim()}
+                    className="h-9 shrink-0 rounded-lg bg-[#0a84ff] text-[12.5px] hover:bg-[#0974df]"
                   >
-                    <RefreshCw
-                      className={cn("size-3.5", checking && "animate-spin")}
-                    />
+                    {saving ? (
+                      <RefreshCw className="size-3.5 animate-spin" />
+                    ) : (
+                      "Connect"
+                    )}
                   </Button>
                 </div>
+                <Button
+                  asChild
+                  size="sm"
+                  variant="ghost"
+                  className="mt-2 h-7 rounded-lg px-2 text-[12px] text-muted-foreground"
+                >
+                  <a
+                    href="https://console.anthropic.com/settings/keys"
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    Get a key from Anthropic <ExternalLink className="ml-1 size-3" />
+                  </a>
+                </Button>
               </>
+            )}
+            {keyError && (
+              <p className="mt-2.5 text-[12.5px] text-red-500">{keyError}</p>
             )}
           </section>
 
@@ -402,7 +401,7 @@ export function SettingsDialog({
         <div className="flex items-center gap-2 border-t bg-black/[0.02] px-5 py-3 dark:bg-white/[0.03]">
           <Sparkles className="size-3.5 text-[#0a84ff]" />
           <p className="text-[12px] text-muted-foreground">
-            Sidenote — 100% local, private by design.
+            Sidenote — your archive lives on this Mac.
           </p>
         </div>
       </DialogContent>

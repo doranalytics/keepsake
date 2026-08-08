@@ -179,7 +179,7 @@ export function LandingPage({ onEnterDemo }: { onEnterDemo: () => void }) {
 
         <p className="mt-6 flex items-center justify-center gap-1.5 text-[13px] text-[#6e6e73] dark:text-[#a1a1a6]">
           <Lock className="size-3.5" />
-          100% local — your messages never leave your Mac.
+          Your archive stays on your Mac. AI only sees the message you ask about.
         </p>
 
         <AlreadyInstalled running={running} />
@@ -212,25 +212,27 @@ export function LandingPage({ onEnterDemo }: { onEnterDemo: () => void }) {
             </ol>
             <div className="mt-6 border-t border-black/[0.06] pt-5 dark:border-white/10">
               <p className="text-[15px] font-semibold">
-                Optional: on-device AI{" "}
+                Optional: AI that explains messages{" "}
                 <span className="font-normal text-[#6e6e73] dark:text-[#a1a1a6]">
-                  — summaries &amp; “ask this thread”
+                  — right-click any text
                 </span>
               </p>
               <p className="mt-1 text-[13.5px] leading-relaxed text-[#6e6e73] dark:text-[#a1a1a6]">
-                AI runs on a local model through{" "}
+                Right-click a message and pick{" "}
+                <span className="font-medium text-[#1d1d1f] dark:text-white">Explain this</span> to
+                decode slang, references, and tone — using the conversation around it, so you stop
+                pasting texts into another app to work out what someone meant. Paste an{" "}
                 <a
-                  href="https://ollama.com/download"
+                  href="https://console.anthropic.com/settings/keys"
                   target="_blank"
                   rel="noreferrer"
                   className="font-medium text-[#0a84ff] underline underline-offset-2"
                 >
-                  Ollama
+                  Anthropic API key
                 </a>{" "}
-                — free, no API keys, nothing uploaded. Install the Ollama app, then pull a model in
-                Terminal (or let Sidenote do it for you in-app):
+                into Settings to switch it on. Only the messages around the one you ask about are
+                sent, and only when you ask — the rest of your archive never goes anywhere.
               </p>
-              <SmallCopy text="ollama pull qwen3.6:27b" />
             </div>
             <div className="mt-6 border-t border-black/[0.06] pt-5 dark:border-white/10">
               <p className="text-[13.5px] leading-relaxed text-[#6e6e73] dark:text-[#a1a1a6]">
@@ -328,7 +330,7 @@ export function LandingPage({ onEnterDemo }: { onEnterDemo: () => void }) {
       </main>
 
       <footer className="pb-10 text-center text-[12px] text-[#6e6e73] dark:text-[#a1a1a6]">
-        Made for macOS · Runs 100% locally · Nothing is uploaded, ever
+        Made for macOS · Your messages are indexed and searched on your Mac · AI is opt-in
       </footer>
     </div>
   );

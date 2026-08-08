@@ -5,11 +5,11 @@ export const metadata: Metadata = {
   metadataBase: new URL("https://sidenote.lol"),
   title: "Sidenote — remember your conversations",
   description:
-    "An iMessage companion. Search everything you've ever texted, keep notes on the people you care about, and ask on-device AI about any thread.",
+    "An iMessage companion. Search everything you've ever texted, keep notes on the people you care about, and right-click any message to have AI explain what it means.",
   openGraph: {
     title: "Sidenote — every text, remembered",
     description:
-      "Search your entire iMessage history, pin the moments that matter, and ask AI about any conversation. 100% on your Mac.",
+      "Search your entire iMessage history, pin the moments that matter, and right-click any message to ask what it means.",
     url: "https://sidenote.lol",
     siteName: "Sidenote",
     type: "website",
@@ -19,7 +19,7 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: "Sidenote — every text, remembered",
     description:
-      "Search your entire iMessage history, pin the moments that matter, and ask AI about any conversation. 100% on your Mac.",
+      "Search your entire iMessage history, pin the moments that matter, and right-click any message to ask what it means.",
     images: ["/og.png"],
   },
   manifest: "/manifest.webmanifest",

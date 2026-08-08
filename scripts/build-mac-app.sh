@@ -42,6 +42,14 @@ rm -rf "$SERVER/build" "$SERVER/verify" "$SERVER/src" "$SERVER/scripts" \
        "$SERVER/macos" "$SERVER/public" "$SERVER/Sidenote Engine" \
        "$SERVER/sidenote.log" "$SERVER/package-lock.json" \
        "$SERVER/tsconfig.tsbuildinfo" "$SERVER/.git"
+# Never ship a developer's API key to everyone who downloads the app. Nothing
+# copies .env today, but this is a one-line guard against a catastrophic
+# mistake and a hard failure if one ever slips through.
+rm -f "$SERVER"/.env "$SERVER"/.env.*
+if grep -rlq "sk-ant-api" "$SERVER" 2>/dev/null; then
+  echo "ABORT: an Anthropic API key is inside the app bundle" >&2
+  exit 1
+fi
 mkdir -p "$SERVER/.next"
 rm -rf "$SERVER/.next/static"
 cp -R .next/static "$SERVER/.next/static"

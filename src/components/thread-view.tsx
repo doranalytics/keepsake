@@ -9,8 +9,10 @@ import {
   ChevronLeft,
   Copy,
   FileDown,
+  Globe,
   NotebookPen,
   Paperclip,
+  Reply,
   Search,
   Sparkles,
   X,
@@ -18,6 +20,7 @@ import {
 import type { Message, SearchResult, Thread } from "@/lib/types";
 import { formatListDate, formatSeparator } from "@/lib/format";
 import { saveMessage } from "@/lib/notes";
+import { ExplainPopover, type ExplainMode } from "@/components/explain-popover";
 import {
   Dialog,
   DialogContent,
@@ -61,6 +64,12 @@ export function ThreadView({
   const [searchQ, setSearchQ] = useState("");
   const [searchResults, setSearchResults] = useState<SearchResult[] | null>(null);
   const [menu, setMenu] = useState<{ x: number; y: number; m: Message } | null>(null);
+  const [explain, setExplain] = useState<{
+    m: Message;
+    mode: ExplainMode;
+    x: number;
+    y: number;
+  } | null>(null);
   const [flash, setFlash] = useState<string | null>(null);
   const [exportOpen, setExportOpen] = useState(false);
   const [draft, setDraft] = useState("");
@@ -429,8 +438,8 @@ export function ThreadView({
                       onContextMenu={(e) => {
                         e.preventDefault();
                         setMenu({
-                          x: Math.min(e.clientX, window.innerWidth - 200),
-                          y: Math.min(e.clientY, window.innerHeight - 110),
+                          x: Math.min(e.clientX, window.innerWidth - 216),
+                          y: Math.min(e.clientY, window.innerHeight - 216),
                           m,
                         });
                       }}
@@ -544,9 +553,32 @@ export function ThreadView({
       {/* right-click menu on a message */}
       {menu && (
         <div
-          className="fixed z-50 w-48 overflow-hidden rounded-xl border bg-background py-1 shadow-lg"
+          className="fixed z-50 w-52 overflow-hidden rounded-xl border bg-background py-1 shadow-lg"
           style={{ left: menu.x, top: menu.y }}
         >
+          {/* The reason this feature exists: stop copy-pasting a confusing
+              text into another app just to find out what it means. */}
+          {!demo &&
+            (
+              [
+                { mode: "explain" as const, label: "Explain this", Icon: Sparkles },
+                { mode: "lookup" as const, label: "Look this up", Icon: Globe },
+                { mode: "reply" as const, label: "Help me reply", Icon: Reply },
+              ]
+            ).map(({ mode, label, Icon }) => (
+              <button
+                key={mode}
+                className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-[13.5px] hover:bg-black/[0.04] dark:hover:bg-white/[0.06]"
+                onClick={() => {
+                  setExplain({ m: menu.m, mode, x: menu.x, y: menu.y });
+                  setMenu(null);
+                }}
+              >
+                <Icon className="size-4 text-[#0a84ff]" />
+                {label}
+              </button>
+            ))}
+          {!demo && <div className="my-1 border-t" />}
           <button
             className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-[13.5px] hover:bg-black/[0.04] dark:hover:bg-white/[0.06]"
             onClick={async () => {
@@ -575,6 +607,18 @@ export function ThreadView({
             Copy text
           </button>
         </div>
+      )}
+
+      {explain && (
+        <ExplainPopover
+          threadId={threadId}
+          message={explain.m}
+          mode={explain.mode}
+          x={explain.x}
+          y={explain.y}
+          onClose={() => setExplain(null)}
+          onOpenPanel={() => onOpenPanel("ai")}
+        />
       )}
 
       {/* confirmation pill */}

@@ -85,7 +85,7 @@ export function getStatus(): AppStatus {
       lastSync: Date.now(),
       threadCount: demoThreads.length,
       messageCount: [...demoMessages.values()].reduce((n, m) => n + m.length, 0),
-      ollama: { running: false, model: null, models: [] },
+      ai: { configured: false },
     };
   }
   const db = openIndex();
@@ -96,7 +96,7 @@ export function getStatus(): AppStatus {
       lastSync: null,
       threadCount: 0,
       messageCount: 0,
-      ollama: { running: false, model: null, models: [] },
+      ai: { configured: false },
     };
   }
   const lastSync = db
@@ -108,7 +108,7 @@ export function getStatus(): AppStatus {
     lastSync: lastSync ? Number(lastSync.value) : null,
     threadCount: (db.prepare("SELECT COUNT(*) c FROM threads").get() as { c: number }).c,
     messageCount: (db.prepare("SELECT COUNT(*) c FROM messages").get() as { c: number }).c,
-    ollama: { running: false, model: null, models: [] }, // filled in by the status route
+    ai: { configured: false }, // filled in by the status route
   };
 }
 
@@ -285,9 +285,14 @@ const aiLine = (m: Message) =>
     m.isFromMe ? "Me" : m.sender || "Them"
   }: ${m.text}`;
 
+// The recent window is deliberately modest: on a 42,000-message thread even
+// 200k characters only reaches back two months, so widening this can't be the
+// answer to "it doesn't know our history". Depth comes from searchThread(),
+// which the model calls as a tool and which reaches the entire archive. This
+// window just supplies the last little while so follow-ups make sense.
 export function getRecentText(
   threadId: string,
-  maxChars = 20000
+  maxChars = 32000
 ): { text: string; earliest: number } {
   // Queried directly (not via the paged reader) so the AI window isn't
   // capped at one UI page of messages.
@@ -396,6 +401,151 @@ export function retrieveRelevantText(
     .sort((a, b) => a.date - b.date || a.id - b.id)
     .map(aiLine)
     .join("\n");
+}
+
+// The messages immediately around one bubble — the entire context the
+// right-click popover needs. Explaining "that fit was chopped" takes the
+// conversation around it, not the whole eight-year history, which is why
+// Explain works instantly on a thread that was never caught up.
+export function getMessageWindow(
+  threadId: string,
+  messageId: number,
+  before = 30,
+  after = 10
+): { text: string; target: string } {
+  const lines: string[] = [];
+  let target = "";
+  if (isDemo) {
+    const all = demoMessages.get(threadId) ?? [];
+    const idx = all.findIndex((m) => m.id === messageId);
+    if (idx === -1) return { text: "", target: "" };
+    target = all[idx].text;
+    for (const m of all.slice(Math.max(0, idx - before), idx + after + 1)) lines.push(aiLine(m));
+    return { text: lines.join("\n"), target };
+  }
+  const db = openIndex();
+  if (!db) return { text: "", target: "" };
+  const hit = db.prepare("SELECT * FROM messages WHERE id = ?").get(messageId) as
+    | MsgRow
+    | undefined;
+  if (!hit) return { text: "", target: "" };
+  target = hit.text;
+  const prev = (
+    db
+      .prepare(
+        `SELECT * FROM messages WHERE thread_id = ? AND text != '' AND (date < ? OR (date = ? AND id < ?))
+         ORDER BY date DESC, id DESC LIMIT ?`
+      )
+      .all(threadId, hit.date, hit.date, hit.id, before) as MsgRow[]
+  ).reverse();
+  const next = db
+    .prepare(
+      `SELECT * FROM messages WHERE thread_id = ? AND text != '' AND (date > ? OR (date = ? AND id > ?))
+       ORDER BY date ASC, id ASC LIMIT ?`
+    )
+    .all(threadId, hit.date, hit.date, hit.id, after) as MsgRow[];
+  for (const r of [...prev, hit, ...next]) lines.push(aiLine(toMessage(r)));
+  return { text: lines.join("\n"), target };
+}
+
+/** Every message in a thread, for the Catch up pass. */
+export function getThreadTexts(threadId: string): { id: number; text: string }[] {
+  if (isDemo) return (demoMessages.get(threadId) ?? []).map((m) => ({ id: m.id, text: m.text }));
+  const db = openIndex();
+  if (!db) return [];
+  return db
+    .prepare(
+      "SELECT id, text FROM messages WHERE thread_id = ? AND text != '' ORDER BY date ASC"
+    )
+    .all(threadId) as { id: number; text: string }[];
+}
+
+export function getThreadMessageIds(threadId: string): number[] {
+  if (isDemo) return (demoMessages.get(threadId) ?? []).map((m) => m.id);
+  const db = openIndex();
+  if (!db) return [];
+  return (
+    db
+      .prepare("SELECT id FROM messages WHERE thread_id = ? AND text != ''")
+      .all(threadId) as { id: number }[]
+  ).map((r) => r.id);
+}
+
+function formatByIds(threadId: string, ids: number[]): string {
+  if (!ids.length) return "";
+  if (isDemo) {
+    const all = demoMessages.get(threadId) ?? [];
+    return all
+      .filter((m) => ids.includes(m.id))
+      .sort((a, b) => a.date - b.date)
+      .map(aiLine)
+      .join("\n");
+  }
+  const db = openIndex();
+  if (!db) return "";
+  const rows = db
+    .prepare(
+      `SELECT * FROM messages WHERE id IN (${ids.map(() => "?").join(",")}) ORDER BY date ASC, id ASC`
+    )
+    .all(...ids) as MsgRow[];
+  return rows.map((r) => aiLine(toMessage(r))).join("\n");
+}
+
+// Keyword hits only — the lexical half of the merge, unscoped by date so it
+// can reach the full history rather than the recent window.
+function ftsIds(threadId: string, query: string, limit: number): number[] {
+  const db = openIndex();
+  if (!db) return [];
+  const terms = Array.from(
+    new Set(
+      query
+        .toLowerCase()
+        .split(/[^\p{L}\p{N}]+/u)
+        .filter((t) => t.length >= 3 || /^\d+$/.test(t))
+        .filter((t) => !STOPWORDS.has(t))
+    )
+  ).slice(0, 12);
+  if (!terms.length) return [];
+  try {
+    return (
+      db
+        .prepare(
+          `SELECT m.id FROM messages_fts JOIN messages m ON m.id = messages_fts.rowid
+           WHERE messages_fts MATCH ? AND m.thread_id = ?
+           ORDER BY bm25(messages_fts) LIMIT ?`
+        )
+        .all(terms.map((t) => `"${t.replace(/"/g, "")}"*`).join(" OR "), threadId, limit) as {
+        id: number;
+      }[]
+    ).map((r) => r.id);
+  } catch {
+    return []; // malformed FTS query
+  }
+}
+
+/** Searches the thread's whole history and returns formatted messages for the
+ *  model. Keyword and semantic each win different questions — keyword when
+ *  your words appear literally, semantic when they don't — so both run and the
+ *  results are merged. Semantic is skipped silently on threads that were never
+ *  caught up, which keeps this working everywhere. */
+export async function searchThread(
+  threadId: string,
+  query: string,
+  limit = 24
+): Promise<string> {
+  const ids = new Set<number>(ftsIds(threadId, query, limit));
+  if (!isDemo) {
+    try {
+      const { isCaughtUp, semanticSearch } = await import("@/lib/embeddings");
+      if (isCaughtUp(threadId)) {
+        const hits = await semanticSearch(getThreadMessageIds(threadId), query, limit);
+        for (const h of hits) ids.add(h.id);
+      }
+    } catch {
+      // Semantic search is an enhancement — never let it take keyword down.
+    }
+  }
+  return formatByIds(threadId, [...ids].slice(0, limit * 2));
 }
 
 export function exportThread(
